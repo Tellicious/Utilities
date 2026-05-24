@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#fafaf9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="../../manifest.json">
+  <link rel="apple-touch-icon" href="../../assets/icons/icon-192.png">
+  <link rel="stylesheet" href="../../assets/styles.css">
+  <link rel="stylesheet" href="resistor.css">
+  <title>Resistor — Utilities</title>
+</head>
+<body class="resistor-app">
+
+  <header class="appbar" id="appbar">
+    <a class="appbar__back" href="../../index.html" aria-label="Back">
+      <svg width="11" height="18" viewBox="0 0 11 18" fill="none">
+        <path d="M9.5 1.5L1.5 9l8 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Utilities</span>
+    </a>
+    <h1 class="appbar__title">Resistor</h1>
+    <div class="appbar__spacer"></div>
+  </header>
+
+  <!-- ====================== PICKER VIEW ====================== -->
+  <section class="view view--picker" id="view-picker" data-active="true">
+
+    <div class="picker__hero">
+      <!-- SVG resistor renders here -->
+      <div class="resistor-render" id="resistorRender" aria-label="Resistor preview"></div>
+
+      <!-- Result -->
+      <div class="result" id="result" role="status" aria-live="polite">
+        <div class="result__value" id="resultValue">—</div>
+        <div class="result__meta" id="resultMeta"></div>
+      </div>
+
+      <!-- Mode segment -->
+      <div class="picker__modes">
+        <div class="seg" role="tablist" aria-label="Band count">
+          <button class="seg__btn seg__btn--active" data-bands="4" role="tab" aria-selected="true">4-band</button>
+          <button class="seg__btn" data-bands="5" role="tab" aria-selected="false">5-band</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Column picker -->
+    <div class="picker__columns" id="pickerColumns">
+      <!-- columns rendered by JS -->
+    </div>
+
+    <!-- Reverse lookup -->
+    <details class="reverse">
+      <summary class="reverse__summary">Reverse lookup — enter a value</summary>
+      <div class="reverse__body">
+        <div class="reverse__row">
+          <input
+            type="text"
+            inputmode="decimal"
+            class="reverse__input"
+            id="reverseInput"
+            placeholder="e.g. 4.7k, 220, 1M"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false">
+          <button class="reverse__go" id="reverseGo">Show</button>
+        </div>
+        <p class="reverse__hint" id="reverseHint">Type a resistance and we'll highlight the matching colours.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ====================== CAMERA VIEW ====================== -->
+  <section class="view view--camera" id="view-camera">
+
+    <!-- Live capture stage -->
+    <div class="camera__stage" id="cameraStage">
+      <video id="camVideo" class="camera__video" playsinline muted autoplay></video>
+      <div class="camera__guide">
+        <div class="camera__guide-box"></div>
+        <p class="camera__guide-text">Position the resistor inside the box,<br>plain background, even light</p>
+      </div>
+      <div class="camera__controls">
+        <button class="camera__btn camera__btn--ghost" id="camPickFile" aria-label="Choose photo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="8.5" cy="10.5" r="1.5" fill="currentColor"/>
+            <path d="M21 16l-5-5-9 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="camera__shutter" id="camShutter" aria-label="Capture"></button>
+        <button class="camera__btn camera__btn--ghost" id="camFlip" aria-label="Flip camera">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M4 8h10l-2-2M20 16H10l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 8a8 8 0 0114-3M20 16a8 8 0 01-14 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <input type="file" accept="image/*" id="camFileInput" hidden>
+    </div>
+
+    <!-- Loading -->
+    <div class="camera__overlay" id="camLoading" hidden>
+      <div class="spinner"></div>
+      <p class="camera__overlay-text" id="camLoadingText">Analysing…</p>
+    </div>
+
+    <!-- Result -->
+    <div class="camera__result" id="camResult" hidden>
+      <div class="camera__result-head">
+        <button class="camera__retake" id="camRetake">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M3 12a9 9 0 1015.4-6.36L21 8M21 3v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Retake
+        </button>
+        <h2 class="camera__result-title" id="camResultTitle">Detected</h2>
+        <button class="camera__open" id="camOpenPicker">Edit</button>
+      </div>
+
+      <div class="camera__compare">
+        <div class="camera__pane">
+          <p class="camera__pane-label">Photo</p>
+          <canvas id="camPhotoCanvas" class="camera__canvas"></canvas>
+        </div>
+        <div class="camera__pane">
+          <p class="camera__pane-label">Detected</p>
+          <div class="camera__render" id="camRender"></div>
+        </div>
+      </div>
+
+      <div class="camera__readout">
+        <div class="camera__readout-value" id="camValue">—</div>
+        <div class="camera__readout-meta" id="camMeta"></div>
+        <div class="camera__bands" id="camBands"></div>
+        <p class="camera__hint" id="camHint"></p>
+      </div>
+    </div>
+
+    <div class="camera__error" id="camError" hidden>
+      <h2>Camera unavailable</h2>
+      <p id="camErrorText"></p>
+      <button class="primary-btn" id="camPickFallback">Pick a photo instead</button>
+    </div>
+  </section>
+
+  <!-- Bottom tab bar -->
+  <nav class="tabbar" role="tablist" aria-label="Resistor mode">
+    <button class="tabbar__btn tabbar__btn--active" data-view="picker" role="tab" aria-selected="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <circle cx="6" cy="12" r="2.5" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="18" cy="12" r="2.5" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <span>Colours</span>
+    </button>
+    <button class="tabbar__btn" data-view="camera" role="tab" aria-selected="false">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M4 8h3l2-2h6l2 2h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <span>Camera</span>
+    </button>
+  </nav>
+
+  <script src="resistor.js"></script>
+  <script src="cv.js"></script>
+  <script src="camera.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('../../sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

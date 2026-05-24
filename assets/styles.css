@@ -206,13 +206,18 @@ button {
 
 .appbar__spacer { width: 60px; }
 .appbar__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
   padding: 8px 10px;
   font-size: 15px;
   color: var(--accent);
   border-radius: var(--r-sm);
-  min-width: 60px;
+  min-width: 44px;
   text-align: right;
 }
+.appbar__action svg { display: block; }
 .appbar__action:active { background: var(--surface-2); }
 .appbar__action[disabled] { color: var(--ink-3); }
 

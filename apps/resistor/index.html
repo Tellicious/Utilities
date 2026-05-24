@@ -22,23 +22,26 @@
       <span>Utilities</span>
     </a>
     <h1 class="appbar__title">Resistor</h1>
-    <div class="appbar__spacer"></div>
+    <button class="appbar__action" id="openLookup" aria-label="Open reverse lookup">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M16 16l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </button>
   </header>
 
   <!-- ====================== PICKER VIEW ====================== -->
   <section class="view view--picker" id="view-picker" data-active="true">
 
-    <div class="picker__hero">
-      <!-- SVG resistor renders here -->
+    <!-- Compact hero: render + value + mode toggle in one block -->
+    <div class="picker__top">
       <div class="resistor-render" id="resistorRender" aria-label="Resistor preview"></div>
 
-      <!-- Result -->
-      <div class="result" id="result" role="status" aria-live="polite">
+      <div class="picker__readout">
         <div class="result__value" id="resultValue">—</div>
         <div class="result__meta" id="resultMeta"></div>
       </div>
 
-      <!-- Mode segment -->
       <div class="picker__modes">
         <div class="seg" role="tablist" aria-label="Band count">
           <button class="seg__btn seg__btn--active" data-bands="4" role="tab" aria-selected="true">4-band</button>
@@ -47,30 +50,10 @@
       </div>
     </div>
 
-    <!-- Column picker -->
+    <!-- Column picker fills remaining space -->
     <div class="picker__columns" id="pickerColumns">
       <!-- columns rendered by JS -->
     </div>
-
-    <!-- Reverse lookup -->
-    <details class="reverse">
-      <summary class="reverse__summary">Reverse lookup — enter a value</summary>
-      <div class="reverse__body">
-        <div class="reverse__row">
-          <input
-            type="text"
-            inputmode="decimal"
-            class="reverse__input"
-            id="reverseInput"
-            placeholder="e.g. 4.7k, 220, 1M"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false">
-          <button class="reverse__go" id="reverseGo">Show</button>
-        </div>
-        <p class="reverse__hint" id="reverseHint">Type a resistance and we'll highlight the matching colours.</p>
-      </div>
-    </details>
   </section>
 
   <!-- ====================== CAMERA VIEW ====================== -->
@@ -165,6 +148,38 @@
       <span>Camera</span>
     </button>
   </nav>
+
+  <!-- Reverse-lookup modal sheet -->
+  <div class="sheet" id="lookupSheet" hidden aria-modal="true" role="dialog" aria-labelledby="lookupTitle">
+    <div class="sheet__scrim" data-close></div>
+    <div class="sheet__panel" role="document">
+      <div class="sheet__grabber" aria-hidden="true"></div>
+      <header class="sheet__head">
+        <h2 class="sheet__title" id="lookupTitle">Reverse lookup</h2>
+        <button class="sheet__close" data-close aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </header>
+      <div class="sheet__body">
+        <label class="sheet__label" for="reverseInput">Enter a resistance value</label>
+        <div class="sheet__row">
+          <input
+            type="text"
+            inputmode="decimal"
+            class="sheet__input"
+            id="reverseInput"
+            placeholder="e.g. 4.7k, 220, 1M, 4k7"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false">
+          <button class="sheet__go" id="reverseGo">Show</button>
+        </div>
+        <p class="sheet__hint" id="reverseHint">Accepts forms like <code>4.7k</code>, <code>4k7</code>, <code>220</code>, <code>1M</code>.</p>
+      </div>
+    </div>
+  </div>
 
   <script src="resistor.js"></script>
   <script src="cv.js"></script>

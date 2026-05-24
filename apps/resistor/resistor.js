@@ -146,50 +146,63 @@ function nearestE24(ohms) {
  * to convey reading direction (matches real resistors).
  */
 function renderResistorSVG(bandIds, mode) {
-  const W = 460, H = 140;
+  const W = 460, H = 130;
   const cy = H / 2;
 
-  // Body geometry — pill shape with subtle "shoulders"
-  const bodyX = 80, bodyY = 36, bodyW = 300, bodyH = 68;
+  // Body geometry — pill shape with soft shoulders
+  const bodyX = 80, bodyY = 38, bodyW = 300, bodyH = 60;
+  const r = 18; // more rounded for a softer look
 
-  // Build body path: rounded pill with slight bulge ends
-  const r = 14;
-  const bodyColor = mode === 5 ? '#aedaef' : '#ead9a8'; // metal-film blue vs carbon beige
+  // Body color — slightly desaturated for the print/real-resistor feel
+  const bodyColor = mode === 5 ? '#b8dceb' : '#e8d5a3';
+  const bodyShade = mode === 5 ? '#9ec3d2' : '#cebb87';
 
   // Compute band positions
-  // 4-band: 4 bands; positions: d1, d2, mult cluster on left, tolerance offset to right
-  // 5-band: similar with extra digit
   const nBands = mode === 5 ? 5 : 4;
   const bandW = 22;
-  // Left group: first (nBands - 1) bands evenly spaced over left ~60% of body
-  // Tolerance band placed in the right ~25% of the body
-  const leftGroupStart = bodyX + 26;
-  const leftGroupEnd   = bodyX + bodyW * 0.62;
-  const tolX = bodyX + bodyW - 50;
+  const leftGroupStart = bodyX + 30;
+  const leftGroupEnd   = bodyX + bodyW * 0.60;
+  const tolX = bodyX + bodyW - 48;
 
   const leftCount = nBands - 1;
-  const leftStep = (leftGroupEnd - leftGroupStart) / Math.max(1, leftCount - 1);
+  const leftStep = leftCount > 1 ? (leftGroupEnd - leftGroupStart) / (leftCount - 1) : 0;
   const positions = [];
   for (let i = 0; i < leftCount; i++) {
     positions.push(leftGroupStart + i * leftStep);
   }
   positions.push(tolX);
 
-  // Build SVG
+  // Build SVG with defs first
   let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
 
-  // Leads
-  svg += `<line x1="0" y1="${cy}" x2="${bodyX + 8}" y2="${cy}" stroke="#a8a8a3" stroke-width="3.5" stroke-linecap="round"/>`;
-  svg += `<line x1="${bodyX + bodyW - 8}" y1="${cy}" x2="${W}" y2="${cy}" stroke="#a8a8a3" stroke-width="3.5" stroke-linecap="round"/>`;
+  // Reusable defs: clip, body gradient, highlight gradient
+  svg += `<defs>`;
+  svg += `<clipPath id="bodyClip"><rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}"/></clipPath>`;
+  // Vertical body gradient for subtle depth
+  svg += `<linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">`;
+  svg += `<stop offset="0%" stop-color="${bodyShade}"/>`;
+  svg += `<stop offset="22%" stop-color="${bodyColor}"/>`;
+  svg += `<stop offset="78%" stop-color="${bodyColor}"/>`;
+  svg += `<stop offset="100%" stop-color="${bodyShade}"/>`;
+  svg += `</linearGradient>`;
+  // Highlight band near top
+  svg += `<linearGradient id="bodyShine" x1="0" y1="0" x2="0" y2="1">`;
+  svg += `<stop offset="0%" stop-color="rgba(255,255,255,0.35)"/>`;
+  svg += `<stop offset="100%" stop-color="rgba(255,255,255,0)"/>`;
+  svg += `</linearGradient>`;
+  svg += `</defs>`;
 
-  // Body
-  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}" fill="${bodyColor}"/>`;
-  // Subtle shoulders (slight dark edges at tips)
-  svg += `<rect x="${bodyX}" y="${bodyY}" width="14" height="${bodyH}" rx="${r}" ry="${r}" fill="rgba(0,0,0,0.06)"/>`;
-  svg += `<rect x="${bodyX + bodyW - 14}" y="${bodyY}" width="14" height="${bodyH}" rx="${r}" ry="${r}" fill="rgba(0,0,0,0.06)"/>`;
+  // Leads (slightly thicker, soft caps)
+  svg += `<line x1="6" y1="${cy}" x2="${bodyX + 10}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
+  svg += `<line x1="${bodyX + bodyW - 10}" y1="${cy}" x2="${W - 6}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
+  // Tiny lead "kinks" at body for charm
+  svg += `<circle cx="${bodyX + 6}" cy="${cy}" r="2" fill="#b3b0a8"/>`;
+  svg += `<circle cx="${bodyX + bodyW - 6}" cy="${cy}" r="2" fill="#b3b0a8"/>`;
+
+  // Body with gradient
+  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}" fill="url(#bodyGrad)"/>`;
 
   // Bands — clipped to body
-  svg += `<defs><clipPath id="bodyClip"><rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}"/></clipPath></defs>`;
   svg += `<g clip-path="url(#bodyClip)">`;
   for (let i = 0; i < nBands; i++) {
     const id = bandIds[i];
@@ -201,7 +214,12 @@ function renderResistorSVG(bandIds, mode) {
     const stroke = (id === 'white') ? ' stroke="#dcdcd6" stroke-width="0.5"' : '';
     svg += `<rect x="${x}" y="${bodyY}" width="${bandW}" height="${bodyH}" fill="${c.hex}"${stroke}/>`;
   }
+  // Subtle highlight overlay on top half of the body
+  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH * 0.42}" fill="url(#bodyShine)"/>`;
   svg += `</g>`;
+
+  // Soft body outline to define silhouette
+  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
 
   svg += `</svg>`;
   return svg;
@@ -219,6 +237,8 @@ const els = {
   reverseGo:   document.getElementById('reverseGo'),
   reverseHint: document.getElementById('reverseHint'),
   appbar:      document.getElementById('appbar'),
+  openLookup:  document.getElementById('openLookup'),
+  sheet:       document.getElementById('lookupSheet'),
 };
 
 // -------------------- COLUMNS RENDERING --------------------
@@ -236,10 +256,15 @@ function renderColumns() {
   kinds.forEach((kind, slotIdx) => {
     const col = document.createElement('div');
     col.className = 'col';
+
     const head = document.createElement('div');
     head.className = 'col__head';
     head.textContent = heads[slotIdx];
     col.appendChild(head);
+
+    // Cells wrapper: flex-grows to fill column, distributes swatches evenly
+    const cells = document.createElement('div');
+    cells.className = 'col__cells';
 
     // Render every color row in the same order across columns,
     // disabling invalid ones (rather than hiding) — keeps alignment.
@@ -255,7 +280,7 @@ function renderColumns() {
       let label = '';
       if (kind === 'digit')           label = c.digit !== null ? String(c.digit) : '';
       else if (kind === 'multiplier') label = c.mult !== null ? formatMultiplierLabel(c.mult) : '';
-      else if (kind === 'tolerance')  label = c.tol !== null ? `± ${c.tol}%` : '';
+      else if (kind === 'tolerance')  label = c.tol !== null ? `±${c.tol}%` : '';
 
       sw.innerHTML = `<span class="swatch__label">${label}</span>`;
 
@@ -269,20 +294,21 @@ function renderColumns() {
         if (picks[slotIdx] === c.id) sw.classList.add('swatch--selected');
         sw.addEventListener('click', () => onSwatchClick(slotIdx, c.id));
       }
-      col.appendChild(sw);
+      cells.appendChild(sw);
     });
 
+    col.appendChild(cells);
     els.columns.appendChild(col);
   });
 }
 
 function formatMultiplierLabel(m) {
-  if (m === 0.01) return '0.01';
-  if (m === 0.1)  return '0.1';
-  if (m < 1000)   return `${m}Ω`;
-  if (m < 1e6)    return `${m/1e3}kΩ`;
-  if (m < 1e9)    return `${m/1e6}MΩ`;
-  return `${m/1e9}GΩ`;
+  if (m === 0.01) return '×0.01';
+  if (m === 0.1)  return '×0.1';
+  if (m < 1000)   return `×${m}`;
+  if (m < 1e6)    return `×${m/1e3}k`;
+  if (m < 1e9)    return `×${m/1e6}M`;
+  return `×${m/1e9}G`;
 }
 
 function onSwatchClick(slotIdx, colorId) {
@@ -422,8 +448,7 @@ function bandsForValue(value, mode) {
 function doReverseLookup() {
   const value = parseResistance(els.reverseIn.value);
   if (value === null) {
-    els.reverseHint.textContent = "Couldn't parse that. Try forms like 4.7k, 220, 1M, 4k7.";
-    els.reverseHint.style.color = '';
+    els.reverseHint.innerHTML = `<span class="bad">Couldn't parse that.</span> Try <code>4.7k</code>, <code>220</code>, <code>1M</code>, or <code>4k7</code>.`;
     return;
   }
   const result = bandsForValue(value, state.mode);
@@ -434,12 +459,44 @@ function doReverseLookup() {
   setCurrentPicks(result.picks);
   renderAll();
   els.reverseHint.innerHTML = result.exact
-    ? `Showing colours for <strong>${formatOhms(value)}</strong>.`
-    : `Showing colours for the nearest representable value.`;
+    ? `<span class="ok">✓ Showing colours for <strong>${formatOhms(value)}</strong>.</span>`
+    : `<span class="ok">✓ Showing colours for nearest representable value.</span>`;
+  // Auto-close after a short delay so the user sees the confirmation
+  setTimeout(closeLookup, 650);
 }
 
 els.reverseGo.addEventListener('click', doReverseLookup);
 els.reverseIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') doReverseLookup(); });
+
+// -------------------- LOOKUP MODAL --------------------
+
+function openLookup() {
+  els.sheet.hidden = false;
+  document.body.style.overflow = 'hidden';
+  // Reset hint to default and focus the input on next frame so animation plays first
+  els.reverseHint.innerHTML = `Accepts forms like <code>4.7k</code>, <code>4k7</code>, <code>220</code>, <code>1M</code>.`;
+  requestAnimationFrame(() => {
+    els.reverseIn.focus();
+    els.reverseIn.select();
+  });
+}
+
+function closeLookup() {
+  els.sheet.hidden = true;
+  document.body.style.overflow = '';
+}
+
+els.openLookup.addEventListener('click', openLookup);
+
+// Close on scrim, × button, or any element marked data-close
+els.sheet.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', closeLookup);
+});
+
+// Close on Escape
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !els.sheet.hidden) closeLookup();
+});
 
 // -------------------- VIEW SWITCHING (tab bar) --------------------
 

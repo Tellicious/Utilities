@@ -140,142 +140,89 @@ function nearestE24(ohms) {
 // -------------------- SVG RENDERER --------------------
 
 /**
- * Render the resistor as flat SVG, matching the reference axial-resistor
- * illustration. Flat design — single body fill, no gradients or shadows.
+ * Render the resistor as flat SVG.
  *
- * Silhouette: imagine the resistor lying horizontally. From left to right:
- *   - Thin lead
- *   - Small SHOULDER bump (taller than where the body's edge is at this x)
- *   - Body that flares slightly outward in the middle (gentle bulge)
- *   - Mirror right shoulder
- *   - Thin lead
- *
- * The shape is built as a single closed path traced clockwise.
+ * The body silhouette path is taken VERBATIM from the user-supplied
+ * resistor.svg (Inkscape). We keep its original coordinate system
+ * (viewBox 2160×1080, with the same transforms) so the path renders
+ * identically to the reference. On top of that, we:
+ *   - parameterize the body fill colour (beige for 4-band, blue for 5-band)
+ *   - draw the lead bar in mid-grey across the full width
+ *   - place coloured bands at known x positions inside the body
  */
 function renderResistorSVG(bandIds, mode) {
-  const W = 460, H = 140;
-  const cy = H / 2;
+  // Body silhouette path, verbatim from resistor.svg. Do not modify.
+  const BODY_PATH = "m 798.5625,1308.5625 c -21.47944,0 -37.32619,4.0094 -49.46875,10.5625 -0.0526,0.028 -0.10377,0.065 -0.15625,0.094 -18.04664,8.9915 -27.35769,22.7119 -33.90625,37.4374 -14.51122,27.7533 -22.11341,59.0945 -55.8125,69.0938 -1.31397,0.3899 -2.62206,0.7469 -3.9375,1.125 l 0,46.2188 c 1.31639,0.3788 2.62251,0.766 3.9375,1.1562 64.74738,19.2121 12.93753,117.1875 139.34375,117.1875 0.73556,0 1.52761,-0.033 2.3125,-0.062 1.42733,0.029 2.86724,0.062 4.34375,0.062 30.2139,0 103.1066,-25.625 131.1875,-25.625 l 185.24995,0 c 28.081,0 100.9736,25.625 131.1876,25.625 1.4764,0 2.9164,-0.034 4.3437,-0.062 0.7849,0.03 1.5769,0.062 2.3125,0.062 126.4062,0 74.5964,-97.9754 139.3438,-117.1875 1.3149,-0.3902 2.6211,-0.7774 3.9374,-1.1562 l 0,-46.2188 c -1.3154,-0.3781 -2.6235,-0.7351 -3.9374,-1.125 -33.6993,-9.9993 -41.3013,-41.3405 -55.8126,-69.0938 -6.5485,-14.7255 -15.8596,-28.4459 -33.9062,-37.4374 -0.053,-0.029 -0.1037,-0.065 -0.1562,-0.094 -12.1426,-6.5531 -27.9894,-10.5625 -49.4688,-10.5625 -0.7233,0 -1.4833,0.034 -2.25,0.062 -1.4474,-0.029 -2.9088,-0.062 -4.4062,-0.062 -30.214,0 -103.1066,25.625 -131.1876,25.625 l -185.24995,0 c -28.0809,0 -100.9736,-25.625 -131.1875,-25.625 -1.49753,0 -2.95885,0.034 -4.40625,0.062 -0.76674,-0.029 -1.52669,-0.062 -2.25,-0.062 z";
 
-  // ---- Geometry (X coordinates from left to right) ----
-  const shoulderLeftX = 110;   // outer x of left shoulder (where lead meets shoulder)
-  const shoulderLeftInnerX = 145;  // inner x of left shoulder (where shoulder ends)
-  const bodyMidX = 230;        // center of body
-  const shoulderRightInnerX = 315; // inner x of right shoulder
-  const shoulderRightX = 350;  // outer x of right shoulder
+  // Geometry in the SVG's native coordinate system (from resistor.svg).
+  // After the transforms, body occupies viewBox y ≈ 228..508 (height 280).
+  // BAND_Y / BAND_H must span this range so the clip-path can crop bands
+  // to the body silhouette and produce full-height bands across the body.
+  const BODY_CX = 1027.5;
+  const BAND_W = 68;
+  const BAND_Y = 220;    // start a bit above body top
+  const BAND_H = 296;    // extend a bit past body bottom (covers y=220..516)
 
-  // ---- Half-heights from centerline (Y) ----
-  const leadHalf = 4;          // lead thickness / 2
-  const shoulderHalf = 32;     // shoulder height (this is where the resistor is widest at the ends)
-  const bodyEdgeHalf = 28;     // body height where shoulder meets body (slight pinch)
-  const bodyMidHalf = 44;      // body height in the middle (the bulge)
+  // Body fill colour: beige for 4-band carbon-film, light-blue for 5-band metal-film.
+  const bodyFill = mode === 5 ? '#aedaef' : '#d9bb7a';
+  const bodyStroke = mode === 5 ? '#4f7080' : '#565248';
 
-  // Body colour (warm tan matching reference)
-  const bodyFill = mode === 5 ? '#aedaef' : '#e8c986';
-
-  // Lead colour and width
-  const leadStroke = '#666666';
-  const leadWidth = 7;
-
-  // ---- Build the silhouette path ----
-  // Tracing clockwise from top of left lead end.
-  const p = [];
-
-  // Helper for smooth cubic curves
-  function cubic(x0, y0, x1, y1, dx) {
-    const span = Math.abs(x1 - x0);
-    const handle = Math.min(dx, span * 0.45);
-    const dir = Math.sign(x1 - x0);
-    return `C ${x0 + dir * handle} ${y0}, ${x1 - dir * handle} ${y1}, ${x1} ${y1}`;
-  }
-
-  const yLead = cy - leadHalf;
-  const yShoulder = cy - shoulderHalf;
-  const yBodyEdge = cy - bodyEdgeHalf;
-  const yBodyMid = cy - bodyMidHalf;
-
-  // === TOP EDGE (left to right) ===
-  // Start at far left (we'll integrate the lead into the shape via a flat line)
-  p.push(`M 0 ${yLead}`);
-  p.push(`L ${shoulderLeftX - 6} ${yLead}`);
-  // Rise from lead up to shoulder peak (the bump goes up)
-  p.push(cubic(shoulderLeftX - 6, yLead, shoulderLeftX, yShoulder, 8));
-  // Across top of shoulder (slight dip as we approach the body)
-  // shoulder peak to body edge — slight downward curve (body is narrower than shoulder)
-  p.push(cubic(shoulderLeftX, yShoulder, shoulderLeftInnerX, yBodyEdge, 18));
-  // Body top: curve up to mid then back down (gentle bulge)
-  p.push(cubic(shoulderLeftInnerX, yBodyEdge, bodyMidX, yBodyMid, 70));
-  p.push(cubic(bodyMidX, yBodyMid, shoulderRightInnerX, yBodyEdge, 70));
-  // Body edge to right shoulder peak (rises up to shoulder height again)
-  p.push(cubic(shoulderRightInnerX, yBodyEdge, shoulderRightX, yShoulder, 18));
-  // Shoulder peak down to lead
-  p.push(cubic(shoulderRightX, yShoulder, shoulderRightX + 6, yLead, 8));
-  p.push(`L ${W} ${yLead}`);
-  // === RIGHT LEAD END (vertical line) ===
-  p.push(`L ${W} ${cy + leadHalf}`);
-  // === BOTTOM EDGE (right to left, mirror) ===
-  const yLeadB = cy + leadHalf;
-  const yShoulderB = cy + shoulderHalf;
-  const yBodyEdgeB = cy + bodyEdgeHalf;
-  const yBodyMidB = cy + bodyMidHalf;
-
-  p.push(`L ${shoulderRightX + 6} ${yLeadB}`);
-  p.push(cubic(shoulderRightX + 6, yLeadB, shoulderRightX, yShoulderB, 8));
-  p.push(cubic(shoulderRightX, yShoulderB, shoulderRightInnerX, yBodyEdgeB, 18));
-  p.push(cubic(shoulderRightInnerX, yBodyEdgeB, bodyMidX, yBodyMidB, 70));
-  p.push(cubic(bodyMidX, yBodyMidB, shoulderLeftInnerX, yBodyEdgeB, 70));
-  p.push(cubic(shoulderLeftInnerX, yBodyEdgeB, shoulderLeftX, yShoulderB, 18));
-  p.push(cubic(shoulderLeftX, yShoulderB, shoulderLeftX - 6, yLeadB, 8));
-  p.push(`L 0 ${yLeadB}`);
-  p.push('Z');
-
-  const silhouette = p.join(' ');
-
-  // ---- Band geometry ----
+  // Band positions (offsets from BODY_CX). Mirrors the original SVG's spacing
+  // for 4-band: bands 1-3 evenly spaced, then a gap, then the tolerance band.
+  // For 5-band: 4 evenly spaced, then a gap, then the tolerance band.
   const nBands = mode === 5 ? 5 : 4;
-  const bandW = 22;
-  // Bands span from top edge of body (yBodyEdge for safety, not yBodyMid) to bottom
-  // To ensure bands fill the body height even where it bulges, we'll clip them.
-  const bandTop = yBodyMid;       // top of body bulge
-  const bandH = bodyMidHalf * 2;  // full body height at bulge
-
-  const bandsStart = shoulderLeftInnerX + 14;
-  const bandsEnd = shoulderRightInnerX - 35;
-  const tolX = shoulderRightInnerX - 8;
-  const leftCount = nBands - 1;
-  const leftStep = leftCount > 1 ? (bandsEnd - bandsStart) / (leftCount - 1) : 0;
-  const positions = [];
-  for (let i = 0; i < leftCount; i++) {
-    positions.push(bandsStart + i * leftStep);
+  let centers;
+  if (nBands === 4) {
+    // 4-band: bands at offsets -208.5, -93.5, +18.5, then +234.5 (tolerance)
+    centers = [-208.5, -93.5, 18.5, 234.5];
+  } else {
+    // 5-band: 4 digit/multiplier bands evenly spaced + tolerance offset
+    centers = [-208.5, -113.5, -18.5, 76.5, 234.5];
   }
-  positions.push(tolX);
 
-  // ---- Build SVG ----
-  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
+  // Lead bar (from original SVG): y=318.11612 to y=366.6, full width
+  // We extend it to a wider viewBox so leads protrude on both sides.
 
-  // Clip path for bands: the silhouette itself (so bands match body's curves exactly)
+  // ---- ViewBox: tight crop around the resistor ----
+  // Body x range in viewBox coords: roughly 660..1395 (width 735)
+  // Lead y range: 318..366
+  // Body y range: 228..512 (after the layer transform)
+  // Pick a viewBox that gives some lead margin on each side.
+  const VB_X = 500;
+  const VB_Y = 200;
+  const VB_W = 1150;
+  const VB_H = 330;
+
+  // Bands clip path: full body silhouette so bands match exactly.
+  // Use a single combined transform on the clipping path so renderers don't
+  // get confused by nested <g> transforms inside clipPath elements.
+  let svg = `<svg viewBox="${VB_X} ${VB_Y} ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
   svg += `<defs>`;
-  svg += `<clipPath id="bodyClip">`;
-  svg += `<path d="${silhouette}"/>`;
+  svg += `<clipPath id="bodyClip" clipPathUnits="userSpaceOnUse">`;
+  // Combined transform: translate(0,27.6403) then translate(0,-1107.6403) = translate(0,-1080)
+  svg += `<path transform="translate(0,-1080)" d="${BODY_PATH}"/>`;
   svg += `</clipPath>`;
   svg += `</defs>`;
 
-  // 1. Leads (behind everything)
-  svg += `<line x1="0" y1="${cy}" x2="${shoulderLeftX}" y2="${cy}" stroke="${leadStroke}" stroke-width="${leadWidth}"/>`;
-  svg += `<line x1="${shoulderRightX}" y1="${cy}" x2="${W}" y2="${cy}" stroke="${leadStroke}" stroke-width="${leadWidth}"/>`;
+  // Lead bar (mid grey, full width)
+  svg += `<rect y="345.7564" x="-200" height="48.487324" width="2500" fill="#808080"/>`;
 
-  // 2. Body silhouette
-  svg += `<path d="${silhouette}" fill="${bodyFill}"/>`;
+  // Body silhouette (same combined transform as the clipPath)
+  svg += `<path transform="translate(0,-1080)" d="${BODY_PATH}" fill="${bodyFill}" stroke="${bodyStroke}" stroke-width="2"/>`;
 
-  // 3. Bands (clipped to silhouette)
+  // Bands — drawn at absolute viewBox coords (no nested transforms).
+  // Body silhouette occupies viewBox y ≈ 228..508 after transforms.
+  // Bands need to extend that full range to be clipped properly.
   svg += `<g clip-path="url(#bodyClip)">`;
   for (let i = 0; i < nBands; i++) {
     const id = bandIds[i];
     if (!id) continue;
     const c = COLOR_BY_ID[id];
     if (!c) continue;
-    const x = positions[i] - bandW / 2;
-    const stroke = (id === 'white') ? ` stroke="#cccccc" stroke-width="0.5"` : '';
-    svg += `<rect x="${x}" y="${bandTop}" width="${bandW}" height="${bandH}" fill="${c.hex}"${stroke}/>`;
+    const cx = BODY_CX + centers[i];
+    const bx = cx - BAND_W / 2;
+    const strokeAttr = (id === 'white') ? ' stroke="#cccccc" stroke-width="1"' : '';
+    svg += `<rect x="${bx}" y="${BAND_Y}" width="${BAND_W}" height="${BAND_H}" fill="${c.hex}"${strokeAttr}/>`;
   }
   svg += `</g>`;
 

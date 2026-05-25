@@ -78,10 +78,33 @@ function showError(err) {
 
 function captureFromVideo() {
   if (!cam.video.videoWidth) return null;
+  // Capture the entire video frame, then crop to the guide-box area —
+  // a horizontal strip centred in the frame, matching the on-screen guide
+  // (78% width, 5:2 aspect ratio). This focuses the CV pipeline on where
+  // the user was told to place the resistor.
+  const vw = cam.video.videoWidth;
+  const vh = cam.video.videoHeight;
+
+  // The video element uses object-fit: cover, so the visible area in the
+  // viewfinder is a centered crop of the video. We replicate that crop
+  // by taking the same centered region the user saw.
+  // The viewfinder fills its container (camera__stage). The video frame
+  // is cropped to that container's aspect ratio. Without knowing the
+  // exact container size, we approximate by taking the full frame and
+  // cropping a 78% × 5:2 box from its centre.
+  const guideW = vw * 0.78;
+  const guideH = guideW / 2.5;  // 5:2 ratio
+  const guideX = (vw - guideW) / 2;
+  const guideY = (vh - guideH) / 2;
+
   const c = document.createElement('canvas');
-  c.width = cam.video.videoWidth;
-  c.height = cam.video.videoHeight;
-  c.getContext('2d').drawImage(cam.video, 0, 0);
+  c.width = Math.round(guideW);
+  c.height = Math.round(guideH);
+  c.getContext('2d').drawImage(
+    cam.video,
+    guideX, guideY, guideW, guideH,  // source (crop)
+    0, 0, c.width, c.height            // dest (full canvas)
+  );
   return c;
 }
 
@@ -215,7 +238,20 @@ function showResult(sourceCanvas, result) {
 
 cam.shutter.addEventListener('click', async () => {
   const c = captureFromVideo();
-  if (c) await process(c);
+  if (c) {
+    await process(c);
+  } else {
+    // Video isn't ready — show a helpful error rather than failing silently.
+    console.warn('Camera shutter pressed but video has no frames yet', {
+      readyState: cam.video.readyState,
+      videoWidth: cam.video.videoWidth,
+      stream: !!cam.stream,
+    });
+    // Brief visible flash so the user sees something happened
+    cam.loading.hidden = false;
+    cam.loadingTxt.textContent = 'Camera not ready yet — please wait a moment and try again.';
+    setTimeout(() => { cam.loading.hidden = true; }, 1500);
+  }
 });
 
 cam.pickFile.addEventListener('click', () => cam.fileInput.click());

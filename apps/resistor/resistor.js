@@ -140,118 +140,110 @@ function nearestE24(ohms) {
 // -------------------- SVG RENDERER --------------------
 
 /**
- * Render the resistor as flat SVG.
- * Smooth organic silhouette matching real axial resistors:
- * leads emerge through small shoulder bumps that taper inward briefly
- * before flaring into the wide central body.
+ * Render the resistor as flat SVG, matching the reference axial-resistor
+ * illustration. Flat design — single body fill, no gradients or shadows.
+ *
+ * Silhouette: imagine the resistor lying horizontally. From left to right:
+ *   - Thin lead
+ *   - Small SHOULDER bump (taller than where the body's edge is at this x)
+ *   - Body that flares slightly outward in the middle (gentle bulge)
+ *   - Mirror right shoulder
+ *   - Thin lead
+ *
+ * The shape is built as a single closed path traced clockwise.
  */
 function renderResistorSVG(bandIds, mode) {
   const W = 460, H = 140;
   const cy = H / 2;
 
-  // ---- Geometry ----
-  // Layout left to right:
-  //   leadEnd ─── shoulder peak ─ neck min ──── body max ──── neck min ─ shoulder peak ─── leadEnd
-  //   x=0          x=86             x=110         x=230 (mid)     x=350    x=374           x=460
-  //   y=±3         y=±20            y=±18         y=±32           y=±18    y=±20           y=±3
+  // ---- Geometry (X coordinates from left to right) ----
+  const shoulderLeftX = 110;   // outer x of left shoulder (where lead meets shoulder)
+  const shoulderLeftInnerX = 145;  // inner x of left shoulder (where shoulder ends)
+  const bodyMidX = 230;        // center of body
+  const shoulderRightInnerX = 315; // inner x of right shoulder
+  const shoulderRightX = 350;  // outer x of right shoulder
 
-  const shoulderLx = 145;
-  const neckLx     = 170;
-  const bodyMidX   = 230;
-  const neckRx     = 290;
-  const shoulderRx = 315;
-  const bodyLeftX  = 178;       // where the band region begins (post-neck)
-  const bodyRightX = 282;       // where the band region ends (pre-neck)
+  // ---- Half-heights from centerline (Y) ----
+  const leadHalf = 4;          // lead thickness / 2
+  const shoulderHalf = 32;     // shoulder height (this is where the resistor is widest at the ends)
+  const bodyEdgeHalf = 28;     // body height where shoulder meets body (slight pinch)
+  const bodyMidHalf = 44;      // body height in the middle (the bulge)
 
-  // Half-heights from centerline:
-  const leadHalf     = 3.5;
-  const shoulderHalf = 22;      // shoulder bump ("wing") - small flare
-  const neckHalf     = 14;      // pinch — distinctly narrower than wing
-  const bodyHalf     = 36;      // wide body bulge
+  // Body colour (warm tan matching reference)
+  const bodyFill = mode === 5 ? '#aedaef' : '#e8c986';
 
-  // Body color
-  const bodyFill = mode === 5 ? '#b8dceb' : '#e8d5a3';
-  const bodyShade = mode === 5 ? '#9fc4d2' : '#cab277';
+  // Lead colour and width
+  const leadStroke = '#666666';
+  const leadWidth = 7;
 
-  // ---- Top edge (left to right), then bottom (right to left), close ----
-  // Each segment uses a cubic Bezier (C) with tangent control points
-  // chosen so the curve passes through the named y-value smoothly.
+  // ---- Build the silhouette path ----
+  // Tracing clockwise from top of left lead end.
+  const p = [];
 
-  // Helper: build a cubic curve from (x0,y0) to (x1,y1) with horizontal tangents
-  // (smooth at both endpoints). Works in either x direction.
-  // The handle length is capped at 45% of the segment width so the curve
-  // never overshoots horizontally.
+  // Helper for smooth cubic curves
   function cubic(x0, y0, x1, y1, dx) {
     const span = Math.abs(x1 - x0);
     const handle = Math.min(dx, span * 0.45);
-    // Handles point inward from each endpoint along the segment direction
     const dir = Math.sign(x1 - x0);
     return `C ${x0 + dir * handle} ${y0}, ${x1 - dir * handle} ${y1}, ${x1} ${y1}`;
   }
 
-  // For convenience, compute y values for top edge
   const yLead = cy - leadHalf;
   const yShoulder = cy - shoulderHalf;
-  const yNeck = cy - neckHalf;
-  const yBody = cy - bodyHalf;
+  const yBodyEdge = cy - bodyEdgeHalf;
+  const yBodyMid = cy - bodyMidHalf;
 
-  const cmds = [];
-  // Start at left end of lead, top
-  cmds.push(`M 0 ${yLead}`);
-  cmds.push(`L ${shoulderLx - 12} ${yLead}`);
-  // Lead → shoulder peak (curve up)
-  cmds.push(cubic(shoulderLx - 12, yLead, shoulderLx, yShoulder, 8));
-  // Shoulder peak → neck (small dip)
-  cmds.push(cubic(shoulderLx, yShoulder, neckLx, yNeck, 10));
-  // Neck → body (flare outward)
-  cmds.push(cubic(neckLx, yNeck, bodyLeftX, yBody, 14));
-  // Body top — gentle arc over the middle, slightly higher at center (bulging)
-  // Approximate with two curves meeting at bodyMidX
-  const yBodyTop = cy - bodyHalf - 1; // tiny extra arc
-  cmds.push(cubic(bodyLeftX, yBody, bodyMidX, yBodyTop, 60));
-  cmds.push(cubic(bodyMidX, yBodyTop, bodyRightX, yBody, 60));
-  // Body → neck on right
-  cmds.push(cubic(bodyRightX, yBody, neckRx, yNeck, 14));
-  // Neck → shoulder peak on right
-  cmds.push(cubic(neckRx, yNeck, shoulderRx, yShoulder, 10));
-  // Shoulder peak → lead on right
-  cmds.push(cubic(shoulderRx, yShoulder, shoulderRx + 12, yLead, 8));
-  cmds.push(`L 460 ${yLead}`);
-  // Close right end of lead
-  cmds.push(`L 460 ${cy + leadHalf}`);
-  // ---- Bottom edge (mirror) ----
+  // === TOP EDGE (left to right) ===
+  // Start at far left (we'll integrate the lead into the shape via a flat line)
+  p.push(`M 0 ${yLead}`);
+  p.push(`L ${shoulderLeftX - 6} ${yLead}`);
+  // Rise from lead up to shoulder peak (the bump goes up)
+  p.push(cubic(shoulderLeftX - 6, yLead, shoulderLeftX, yShoulder, 8));
+  // Across top of shoulder (slight dip as we approach the body)
+  // shoulder peak to body edge — slight downward curve (body is narrower than shoulder)
+  p.push(cubic(shoulderLeftX, yShoulder, shoulderLeftInnerX, yBodyEdge, 18));
+  // Body top: curve up to mid then back down (gentle bulge)
+  p.push(cubic(shoulderLeftInnerX, yBodyEdge, bodyMidX, yBodyMid, 70));
+  p.push(cubic(bodyMidX, yBodyMid, shoulderRightInnerX, yBodyEdge, 70));
+  // Body edge to right shoulder peak (rises up to shoulder height again)
+  p.push(cubic(shoulderRightInnerX, yBodyEdge, shoulderRightX, yShoulder, 18));
+  // Shoulder peak down to lead
+  p.push(cubic(shoulderRightX, yShoulder, shoulderRightX + 6, yLead, 8));
+  p.push(`L ${W} ${yLead}`);
+  // === RIGHT LEAD END (vertical line) ===
+  p.push(`L ${W} ${cy + leadHalf}`);
+  // === BOTTOM EDGE (right to left, mirror) ===
   const yLeadB = cy + leadHalf;
   const yShoulderB = cy + shoulderHalf;
-  const yNeckB = cy + neckHalf;
-  const yBodyB = cy + bodyHalf;
-  const yBodyBotB = cy + bodyHalf + 1;
+  const yBodyEdgeB = cy + bodyEdgeHalf;
+  const yBodyMidB = cy + bodyMidHalf;
 
-  cmds.push(`L ${shoulderRx + 12} ${yLeadB}`);
-  cmds.push(cubic(shoulderRx + 12, yLeadB, shoulderRx, yShoulderB, 8));
-  cmds.push(cubic(shoulderRx, yShoulderB, neckRx, yNeckB, 10));
-  cmds.push(cubic(neckRx, yNeckB, bodyRightX, yBodyB, 14));
-  cmds.push(cubic(bodyRightX, yBodyB, bodyMidX, yBodyBotB, 60));
-  cmds.push(cubic(bodyMidX, yBodyBotB, bodyLeftX, yBodyB, 60));
-  cmds.push(cubic(bodyLeftX, yBodyB, neckLx, yNeckB, 14));
-  cmds.push(cubic(neckLx, yNeckB, shoulderLx, yShoulderB, 10));
-  cmds.push(cubic(shoulderLx, yShoulderB, shoulderLx - 12, yLeadB, 8));
-  cmds.push(`L 0 ${yLeadB}`);
-  cmds.push('Z');
+  p.push(`L ${shoulderRightX + 6} ${yLeadB}`);
+  p.push(cubic(shoulderRightX + 6, yLeadB, shoulderRightX, yShoulderB, 8));
+  p.push(cubic(shoulderRightX, yShoulderB, shoulderRightInnerX, yBodyEdgeB, 18));
+  p.push(cubic(shoulderRightInnerX, yBodyEdgeB, bodyMidX, yBodyMidB, 70));
+  p.push(cubic(bodyMidX, yBodyMidB, shoulderLeftInnerX, yBodyEdgeB, 70));
+  p.push(cubic(shoulderLeftInnerX, yBodyEdgeB, shoulderLeftX, yShoulderB, 18));
+  p.push(cubic(shoulderLeftX, yShoulderB, shoulderLeftX - 6, yLeadB, 8));
+  p.push(`L 0 ${yLeadB}`);
+  p.push('Z');
 
-  const silhouette = cmds.join(' ');
+  const silhouette = p.join(' ');
 
-  // ---- Band positions on the flat body region ----
+  // ---- Band geometry ----
   const nBands = mode === 5 ? 5 : 4;
-  const bandW = 18;
-  const bandTop = cy - bodyHalf;
-  const bandH = bodyHalf * 2;
+  const bandW = 22;
+  // Bands span from top edge of body (yBodyEdge for safety, not yBodyMid) to bottom
+  // To ensure bands fill the body height even where it bulges, we'll clip them.
+  const bandTop = yBodyMid;       // top of body bulge
+  const bandH = bodyMidHalf * 2;  // full body height at bulge
 
-  const bandsStart = bodyLeftX + 12;
-  const bandsEnd   = bodyRightX - 55;
-  const tolX       = bodyRightX - 18;
-  const leftCount  = nBands - 1;
-  const leftStep   = leftCount > 1 ? (bandsEnd - bandsStart) / (leftCount - 1) : 0;
-  const positions  = [];
+  const bandsStart = shoulderLeftInnerX + 14;
+  const bandsEnd = shoulderRightInnerX - 35;
+  const tolX = shoulderRightInnerX - 8;
+  const leftCount = nBands - 1;
+  const leftStep = leftCount > 1 ? (bandsEnd - bandsStart) / (leftCount - 1) : 0;
+  const positions = [];
   for (let i = 0; i < leftCount; i++) {
     positions.push(bandsStart + i * leftStep);
   }
@@ -260,30 +252,21 @@ function renderResistorSVG(bandIds, mode) {
   // ---- Build SVG ----
   let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
 
+  // Clip path for bands: the silhouette itself (so bands match body's curves exactly)
   svg += `<defs>`;
-  svg += `<linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">`;
-  svg += `<stop offset="0%" stop-color="${bodyShade}"/>`;
-  svg += `<stop offset="22%" stop-color="${bodyFill}"/>`;
-  svg += `<stop offset="78%" stop-color="${bodyFill}"/>`;
-  svg += `<stop offset="100%" stop-color="${bodyShade}"/>`;
-  svg += `</linearGradient>`;
-  svg += `<linearGradient id="bodyShine" x1="0" y1="0" x2="0" y2="1">`;
-  svg += `<stop offset="0%" stop-color="rgba(255,255,255,0.26)"/>`;
-  svg += `<stop offset="100%" stop-color="rgba(255,255,255,0)"/>`;
-  svg += `</linearGradient>`;
   svg += `<clipPath id="bodyClip">`;
-  svg += `<rect x="${bodyLeftX + 4}" y="${bandTop}" width="${bodyRightX - bodyLeftX - 8}" height="${bandH}"/>`;
+  svg += `<path d="${silhouette}"/>`;
   svg += `</clipPath>`;
   svg += `</defs>`;
 
-  // Leads — solid dark grey lines, drawn behind body
-  svg += `<line x1="0" y1="${cy}" x2="${shoulderLx}" y2="${cy}" stroke="#8c8780" stroke-width="6"/>`;
-  svg += `<line x1="${shoulderRx}" y1="${cy}" x2="460" y2="${cy}" stroke="#8c8780" stroke-width="6"/>`;
+  // 1. Leads (behind everything)
+  svg += `<line x1="0" y1="${cy}" x2="${shoulderLeftX}" y2="${cy}" stroke="${leadStroke}" stroke-width="${leadWidth}"/>`;
+  svg += `<line x1="${shoulderRightX}" y1="${cy}" x2="${W}" y2="${cy}" stroke="${leadStroke}" stroke-width="${leadWidth}"/>`;
 
-  // Body silhouette
-  svg += `<path d="${silhouette}" fill="url(#bodyGrad)"/>`;
+  // 2. Body silhouette
+  svg += `<path d="${silhouette}" fill="${bodyFill}"/>`;
 
-  // Bands clipped to flat body
+  // 3. Bands (clipped to silhouette)
   svg += `<g clip-path="url(#bodyClip)">`;
   for (let i = 0; i < nBands; i++) {
     const id = bandIds[i];
@@ -291,15 +274,10 @@ function renderResistorSVG(bandIds, mode) {
     const c = COLOR_BY_ID[id];
     if (!c) continue;
     const x = positions[i] - bandW / 2;
-    const stroke = (id === 'white') ? ' stroke="#dcdcd6" stroke-width="0.5"' : '';
+    const stroke = (id === 'white') ? ` stroke="#cccccc" stroke-width="0.5"` : '';
     svg += `<rect x="${x}" y="${bandTop}" width="${bandW}" height="${bandH}" fill="${c.hex}"${stroke}/>`;
   }
-  // Highlight
-  svg += `<rect x="${bodyLeftX}" y="${bandTop}" width="${bodyRightX - bodyLeftX}" height="${bandH * 0.5}" fill="url(#bodyShine)"/>`;
   svg += `</g>`;
-
-  // Outline
-  svg += `<path d="${silhouette}" fill="none" stroke="rgba(0,0,0,0.22)" stroke-width="1.2"/>`;
 
   svg += `</svg>`;
   return svg;
@@ -593,6 +571,13 @@ function switchView(name) {
     b.classList.toggle('tabbar__btn--active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
+
+  // Hide picker-only controls (Bands toggle + Lookup icon) when on camera tab.
+  const showPickerControls = (name === 'picker');
+  document.querySelectorAll('.appbar__cluster .picker-only').forEach(el => {
+    el.hidden = !showPickerControls;
+  });
+
   // Notify camera module
   if (name === 'camera') window.dispatchEvent(new CustomEvent('camera:enter'));
   else window.dispatchEvent(new CustomEvent('camera:leave'));

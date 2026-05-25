@@ -207,7 +207,7 @@ button {
   text-overflow: ellipsis;
 }
 
-.appbar__spacer { width: 60px; }
+.appbar__spacer { flex: 1; min-width: 8px; }
 .appbar__action {
   display: inline-flex;
   align-items: center;
@@ -231,6 +231,7 @@ button {
   gap: 6px;
   flex: 0 0 auto;
 }
+.appbar__cluster [hidden] { display: none !important; }
 
 .appbar__label {
   font-size: 12px;

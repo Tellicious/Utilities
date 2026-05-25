@@ -21,6 +21,8 @@ const cam = {
   meta:       document.getElementById('camMeta'),
   bands:      document.getElementById('camBands'),
   hint:       document.getElementById('camHint'),
+  debug:      document.getElementById('camDebug'),
+  debugImg:   document.getElementById('camDebugImg'),
   error:      document.getElementById('camError'),
   errorText:  document.getElementById('camErrorText'),
   pickFallback:document.getElementById('camPickFallback'),
@@ -140,18 +142,31 @@ async function process(sourceCanvas) {
 }
 
 function showResult(sourceCanvas, result) {
-  // Hide live stage, show result
+  // Hide live stage + error, show result
   stopCamera();
   cam.stage.style.display = 'none';
+  cam.error.hidden = true;
   cam.result.hidden = false;
 
   // Draw the photo on the result canvas
   const pc = cam.photoCanvas;
   const ctx = pc.getContext('2d');
-  // Fit canvas to displayed width while preserving aspect
   pc.width = sourceCanvas.width;
   pc.height = sourceCanvas.height;
   ctx.drawImage(sourceCanvas, 0, 0);
+
+  // Show the debug image (what the CV pipeline analyzed) if available.
+  // This is shown in both success and failure cases.
+  cam.debugImg.innerHTML = '';
+  if (result.debugImage) {
+    cam.debug.hidden = false;
+    // The debug image is a canvas; we display it scaled to fit.
+    const dbg = result.debugImage;
+    dbg.classList.add('camera__debug-canvas');
+    cam.debugImg.appendChild(dbg);
+  } else {
+    cam.debug.hidden = true;
+  }
 
   if (!result.success) {
     cam.resultTitle.textContent = "Couldn't read this";

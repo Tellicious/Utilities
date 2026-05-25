@@ -21,11 +21,12 @@
       </svg>
       <span>Utilities</span>
     </a>
-    <h1 class="appbar__title">Resistor</h1>
+    <div class="appbar__spacer"></div>
     <div class="appbar__cluster">
-      <div class="seg seg--compact" role="tablist" aria-label="Band count">
-        <button class="seg__btn seg__btn--active" data-bands="4" role="tab" aria-selected="true" aria-label="4-band">4</button>
-        <button class="seg__btn" data-bands="5" role="tab" aria-selected="false" aria-label="5-band">5</button>
+      <label class="appbar__label" id="bandsLabel">Bands</label>
+      <div class="seg seg--compact" role="tablist" aria-labelledby="bandsLabel">
+        <button class="seg__btn seg__btn--active" data-bands="4" role="tab" aria-selected="true" aria-label="4 bands">4</button>
+        <button class="seg__btn" data-bands="5" role="tab" aria-selected="false" aria-label="5 bands">5</button>
       </div>
       <button class="appbar__icon" id="openLookup" aria-label="Open reverse lookup">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -114,6 +115,11 @@
         </div>
       </div>
 
+      <div class="camera__debug" id="camDebug" hidden>
+        <p class="camera__pane-label">What the scanner saw</p>
+        <div class="camera__debug-img" id="camDebugImg"></div>
+      </div>
+
       <div class="camera__readout">
         <div class="camera__readout-value" id="camValue">—</div>
         <div class="camera__readout-meta" id="camMeta"></div>
@@ -166,12 +172,12 @@
         <div class="sheet__row">
           <input
             type="text"
-            inputmode="decimal"
             class="sheet__input"
             id="reverseInput"
             placeholder="e.g. 4.7k, 220, 1M, 4k7"
             autocomplete="off"
             autocorrect="off"
+            autocapitalize="none"
             spellcheck="false">
           <button class="sheet__go" id="reverseGo">Show</button>
         </div>

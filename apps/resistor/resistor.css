@@ -616,3 +616,30 @@
 }
 .sheet__hint .ok { color: var(--good); }
 .sheet__hint .bad { color: var(--bad); }
+
+/* Debug pane: shows what the CV pipeline analyzed */
+.camera__debug {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.camera__debug[hidden] { display: none; }
+.camera__debug-img {
+  margin-top: 8px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 30px;
+}
+.camera__debug-canvas {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  display: block;
+  border-radius: var(--r-sm);
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: pixelated;
+}

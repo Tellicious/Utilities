@@ -141,34 +141,114 @@ function nearestE24(ohms) {
 
 /**
  * Render the resistor as flat SVG.
- * Shape: classic axial resistor with raised shoulder bumps at each end.
- * Bands are evenly spaced; tolerance band is offset further to the right.
+ * Smooth organic silhouette matching real axial resistors:
+ * leads emerge through small shoulder bumps that taper inward briefly
+ * before flaring into the wide central body.
  */
 function renderResistorSVG(bandIds, mode) {
   const W = 460, H = 140;
   const cy = H / 2;
 
-  // Body geometry
-  //   Main cylinder: bodyX..bodyX+bodyW, height bodyH
-  //   Shoulders: short wider sections at each end (shoulderW wide, shoulderExtraH taller)
-  const bodyX = 84, bodyY = 44, bodyW = 292, bodyH = 52;
-  const shoulderW = 16;
-  const shoulderExtraH = 10; // each side, so total shoulder height = bodyH + 2*extra
-  const shoulderRadius = 7;
-  const bodyRadius = 4;
+  // ---- Geometry ----
+  // Layout left to right:
+  //   leadEnd ─── shoulder peak ─ neck min ──── body max ──── neck min ─ shoulder peak ─── leadEnd
+  //   x=0          x=86             x=110         x=230 (mid)     x=350    x=374           x=460
+  //   y=±3         y=±20            y=±18         y=±32           y=±18    y=±20           y=±3
 
-  // Body colour
-  const bodyColor = mode === 5 ? '#b8dceb' : '#e8d5a3';
-  const bodyShade = mode === 5 ? '#a3c8d8' : '#cebb87';
-  const shoulderColor = mode === 5 ? '#9bc1d2' : '#c9b27e'; // slightly darker
+  const shoulderLx = 145;
+  const neckLx     = 170;
+  const bodyMidX   = 230;
+  const neckRx     = 290;
+  const shoulderRx = 315;
+  const bodyLeftX  = 178;       // where the band region begins (post-neck)
+  const bodyRightX = 282;       // where the band region ends (pre-neck)
 
-  // Band placement on the main body
+  // Half-heights from centerline:
+  const leadHalf     = 3.5;
+  const shoulderHalf = 22;      // shoulder bump ("wing") - small flare
+  const neckHalf     = 14;      // pinch — distinctly narrower than wing
+  const bodyHalf     = 36;      // wide body bulge
+
+  // Body color
+  const bodyFill = mode === 5 ? '#b8dceb' : '#e8d5a3';
+  const bodyShade = mode === 5 ? '#9fc4d2' : '#cab277';
+
+  // ---- Top edge (left to right), then bottom (right to left), close ----
+  // Each segment uses a cubic Bezier (C) with tangent control points
+  // chosen so the curve passes through the named y-value smoothly.
+
+  // Helper: build a cubic curve from (x0,y0) to (x1,y1) with horizontal tangents
+  // (smooth at both endpoints). Works in either x direction.
+  // The handle length is capped at 45% of the segment width so the curve
+  // never overshoots horizontally.
+  function cubic(x0, y0, x1, y1, dx) {
+    const span = Math.abs(x1 - x0);
+    const handle = Math.min(dx, span * 0.45);
+    // Handles point inward from each endpoint along the segment direction
+    const dir = Math.sign(x1 - x0);
+    return `C ${x0 + dir * handle} ${y0}, ${x1 - dir * handle} ${y1}, ${x1} ${y1}`;
+  }
+
+  // For convenience, compute y values for top edge
+  const yLead = cy - leadHalf;
+  const yShoulder = cy - shoulderHalf;
+  const yNeck = cy - neckHalf;
+  const yBody = cy - bodyHalf;
+
+  const cmds = [];
+  // Start at left end of lead, top
+  cmds.push(`M 0 ${yLead}`);
+  cmds.push(`L ${shoulderLx - 12} ${yLead}`);
+  // Lead → shoulder peak (curve up)
+  cmds.push(cubic(shoulderLx - 12, yLead, shoulderLx, yShoulder, 8));
+  // Shoulder peak → neck (small dip)
+  cmds.push(cubic(shoulderLx, yShoulder, neckLx, yNeck, 10));
+  // Neck → body (flare outward)
+  cmds.push(cubic(neckLx, yNeck, bodyLeftX, yBody, 14));
+  // Body top — gentle arc over the middle, slightly higher at center (bulging)
+  // Approximate with two curves meeting at bodyMidX
+  const yBodyTop = cy - bodyHalf - 1; // tiny extra arc
+  cmds.push(cubic(bodyLeftX, yBody, bodyMidX, yBodyTop, 60));
+  cmds.push(cubic(bodyMidX, yBodyTop, bodyRightX, yBody, 60));
+  // Body → neck on right
+  cmds.push(cubic(bodyRightX, yBody, neckRx, yNeck, 14));
+  // Neck → shoulder peak on right
+  cmds.push(cubic(neckRx, yNeck, shoulderRx, yShoulder, 10));
+  // Shoulder peak → lead on right
+  cmds.push(cubic(shoulderRx, yShoulder, shoulderRx + 12, yLead, 8));
+  cmds.push(`L 460 ${yLead}`);
+  // Close right end of lead
+  cmds.push(`L 460 ${cy + leadHalf}`);
+  // ---- Bottom edge (mirror) ----
+  const yLeadB = cy + leadHalf;
+  const yShoulderB = cy + shoulderHalf;
+  const yNeckB = cy + neckHalf;
+  const yBodyB = cy + bodyHalf;
+  const yBodyBotB = cy + bodyHalf + 1;
+
+  cmds.push(`L ${shoulderRx + 12} ${yLeadB}`);
+  cmds.push(cubic(shoulderRx + 12, yLeadB, shoulderRx, yShoulderB, 8));
+  cmds.push(cubic(shoulderRx, yShoulderB, neckRx, yNeckB, 10));
+  cmds.push(cubic(neckRx, yNeckB, bodyRightX, yBodyB, 14));
+  cmds.push(cubic(bodyRightX, yBodyB, bodyMidX, yBodyBotB, 60));
+  cmds.push(cubic(bodyMidX, yBodyBotB, bodyLeftX, yBodyB, 60));
+  cmds.push(cubic(bodyLeftX, yBodyB, neckLx, yNeckB, 14));
+  cmds.push(cubic(neckLx, yNeckB, shoulderLx, yShoulderB, 10));
+  cmds.push(cubic(shoulderLx, yShoulderB, shoulderLx - 12, yLeadB, 8));
+  cmds.push(`L 0 ${yLeadB}`);
+  cmds.push('Z');
+
+  const silhouette = cmds.join(' ');
+
+  // ---- Band positions on the flat body region ----
   const nBands = mode === 5 ? 5 : 4;
-  const bandW = 22;
-  // Bands sit only on the flat middle section (avoid shoulders)
-  const bandsStart = bodyX + shoulderW + 12;
-  const bandsEnd   = bodyX + bodyW - shoulderW - 60; // leave room for tolerance band
-  const tolX       = bodyX + bodyW - shoulderW - 18;
+  const bandW = 18;
+  const bandTop = cy - bodyHalf;
+  const bandH = bodyHalf * 2;
+
+  const bandsStart = bodyLeftX + 12;
+  const bandsEnd   = bodyRightX - 55;
+  const tolX       = bodyRightX - 18;
   const leftCount  = nBands - 1;
   const leftStep   = leftCount > 1 ? (bandsEnd - bandsStart) / (leftCount - 1) : 0;
   const positions  = [];
@@ -177,50 +257,33 @@ function renderResistorSVG(bandIds, mode) {
   }
   positions.push(tolX);
 
-  // Build SVG
+  // ---- Build SVG ----
   let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
 
-  // Defs
-  const shoulderY = bodyY - shoulderExtraH;
-  const shoulderH = bodyH + 2 * shoulderExtraH;
-
   svg += `<defs>`;
-  // Vertical gradients for cylindrical depth
   svg += `<linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">`;
   svg += `<stop offset="0%" stop-color="${bodyShade}"/>`;
-  svg += `<stop offset="22%" stop-color="${bodyColor}"/>`;
-  svg += `<stop offset="78%" stop-color="${bodyColor}"/>`;
+  svg += `<stop offset="22%" stop-color="${bodyFill}"/>`;
+  svg += `<stop offset="78%" stop-color="${bodyFill}"/>`;
   svg += `<stop offset="100%" stop-color="${bodyShade}"/>`;
   svg += `</linearGradient>`;
-  svg += `<linearGradient id="shoulderGrad" x1="0" y1="0" x2="0" y2="1">`;
-  svg += `<stop offset="0%" stop-color="${shoulderColor}" stop-opacity="0.85"/>`;
-  svg += `<stop offset="50%" stop-color="${shoulderColor}"/>`;
-  svg += `<stop offset="100%" stop-color="${shoulderColor}" stop-opacity="0.85"/>`;
-  svg += `</linearGradient>`;
-  // Highlight band on top
   svg += `<linearGradient id="bodyShine" x1="0" y1="0" x2="0" y2="1">`;
-  svg += `<stop offset="0%" stop-color="rgba(255,255,255,0.32)"/>`;
+  svg += `<stop offset="0%" stop-color="rgba(255,255,255,0.26)"/>`;
   svg += `<stop offset="100%" stop-color="rgba(255,255,255,0)"/>`;
   svg += `</linearGradient>`;
-  // Clip path for bands: only the main body, not the shoulders
   svg += `<clipPath id="bodyClip">`;
-  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH}" rx="${bodyRadius}" ry="${bodyRadius}"/>`;
+  svg += `<rect x="${bodyLeftX + 4}" y="${bandTop}" width="${bodyRightX - bodyLeftX - 8}" height="${bandH}"/>`;
   svg += `</clipPath>`;
   svg += `</defs>`;
 
-  // Leads (slightly thicker, soft caps)
-  svg += `<line x1="6" y1="${cy}" x2="${bodyX + 8}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
-  svg += `<line x1="${bodyX + bodyW - 8}" y1="${cy}" x2="${W - 6}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
+  // Leads — solid dark grey lines, drawn behind body
+  svg += `<line x1="0" y1="${cy}" x2="${shoulderLx}" y2="${cy}" stroke="#8c8780" stroke-width="6"/>`;
+  svg += `<line x1="${shoulderRx}" y1="${cy}" x2="460" y2="${cy}" stroke="#8c8780" stroke-width="6"/>`;
 
-  // Left shoulder (drawn first, sits behind body slightly)
-  svg += `<rect x="${bodyX}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="url(#shoulderGrad)"/>`;
-  // Right shoulder
-  svg += `<rect x="${bodyX + bodyW - shoulderW * 1.8}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="url(#shoulderGrad)"/>`;
+  // Body silhouette
+  svg += `<path d="${silhouette}" fill="url(#bodyGrad)"/>`;
 
-  // Main body cylinder
-  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH}" rx="${bodyRadius}" ry="${bodyRadius}" fill="url(#bodyGrad)"/>`;
-
-  // Bands — clipped to main body only
+  // Bands clipped to flat body
   svg += `<g clip-path="url(#bodyClip)">`;
   for (let i = 0; i < nBands; i++) {
     const id = bandIds[i];
@@ -229,17 +292,14 @@ function renderResistorSVG(bandIds, mode) {
     if (!c) continue;
     const x = positions[i] - bandW / 2;
     const stroke = (id === 'white') ? ' stroke="#dcdcd6" stroke-width="0.5"' : '';
-    svg += `<rect x="${x}" y="${bodyY}" width="${bandW}" height="${bodyH}" fill="${c.hex}"${stroke}/>`;
+    svg += `<rect x="${x}" y="${bandTop}" width="${bandW}" height="${bandH}" fill="${c.hex}"${stroke}/>`;
   }
-  // Highlight overlay on top half of body
-  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH * 0.45}" fill="url(#bodyShine)"/>`;
+  // Highlight
+  svg += `<rect x="${bodyLeftX}" y="${bandTop}" width="${bodyRightX - bodyLeftX}" height="${bandH * 0.5}" fill="url(#bodyShine)"/>`;
   svg += `</g>`;
 
-  // Soft outline around full silhouette (shoulders + body)
-  // Approximate with two rounded rects for the shoulders + a stroke-only body rect
-  svg += `<rect x="${bodyX}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="none" stroke="rgba(0,0,0,0.10)" stroke-width="1"/>`;
-  svg += `<rect x="${bodyX + bodyW - shoulderW * 1.8}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="none" stroke="rgba(0,0,0,0.10)" stroke-width="1"/>`;
-  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH}" rx="${bodyRadius}" ry="${bodyRadius}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
+  // Outline
+  svg += `<path d="${silhouette}" fill="none" stroke="rgba(0,0,0,0.22)" stroke-width="1.2"/>`;
 
   svg += `</svg>`;
   return svg;

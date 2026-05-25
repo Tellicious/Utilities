@@ -139,24 +139,35 @@ async function detectResistor(imageData) {
 
   // 2) Estimate background and build resistor mask (anything sufficiently
   //    different from background = part of the resistor or its leads).
-  //    Try a couple of thresholds; metal-film resistors on light surfaces can
-  //    be only ~50 RGB-units apart from the background.
+  //    Try a sequence of thresholds; metal-film resistors on light surfaces
+  //    can be only ~40 RGB-units apart from the background.
   const bg = estimateBackground(work);
   let mask = computeResistorMask(work, bg, 50);
-  if (mask.coverage < 0.01) {
-    mask = computeResistorMask(work, bg, 30);
+  if (mask.coverage < 0.005) mask = computeResistorMask(work, bg, 30);
+  if (mask.coverage < 0.003) mask = computeResistorMask(work, bg, 20);
+  if (mask.coverage < 0.001) {
+    return {
+      success: false,
+      reason: "Can't separate the resistor from the background. Try a plainer surface with more contrast (e.g. white paper).",
+      debugImage: imageDataToCanvas(work),
+    };
   }
-  if (mask.coverage < 0.005) {
-    return { success: false, reason: "Can't separate the resistor from the background. Try a plainer surface with more contrast." };
-  }
-  if (mask.coverage > 0.7) {
-    return { success: false, reason: "Background looks cluttered. Try a plainer, lighter surface." };
+  if (mask.coverage > 0.75) {
+    return {
+      success: false,
+      reason: "Background looks too busy. Try a plain, uniform surface.",
+      debugImage: imageDataToCanvas(work),
+    };
   }
 
   // 3) Largest connected component
   const cc = largestComponent(mask.mask, work.width, work.height);
-  if (!cc || cc.count < 400) {
-    return { success: false, reason: "Resistor area too small. Move the camera closer." };
+  if (!cc || cc.count < 200) {
+    return {
+      success: false,
+      reason: "Couldn't find the resistor. Move the camera closer and centre the resistor in the frame.",
+      debugImage: imageDataToCanvas(work),
+    };
   }
 
   // 4) PCA on component pixels for orientation
@@ -170,15 +181,20 @@ async function detectResistor(imageData) {
   // 6) Re-find the resistor in the rotated image
   let bg2 = estimateBackground(rotated);
   let mask2 = computeResistorMask(rotated, bg2, 50);
-  if (mask2.coverage < 0.01) mask2 = computeResistorMask(rotated, bg2, 30);
+  if (mask2.coverage < 0.005) mask2 = computeResistorMask(rotated, bg2, 30);
+  if (mask2.coverage < 0.003) mask2 = computeResistorMask(rotated, bg2, 20);
   let cc2 = largestComponent(mask2.mask, rotated.width, rotated.height);
   if (!cc2) {
-    return { success: false, reason: "Detection failed after rotation." };
+    return {
+      success: false,
+      reason: "Detection failed after rotation.",
+      debugImage: imageDataToCanvas(rotated),
+    };
   }
 
   // 6b) Sanity check: the resistor should be wider than tall after rotation.
-  //     If not, rotate another 90° (PCA can pick either the major axis or
-  //     the line perpendicular to it, depending on sign conventions).
+  //     If not, rotate another 90° (PCA gives the major-axis angle, but
+  //     after rotation we may still be vertical depending on sign).
   let workRotated = rotated;
   const bw = cc2.bounds.maxX - cc2.bounds.minX + 1;
   const bh = cc2.bounds.maxY - cc2.bounds.minY + 1;
@@ -186,22 +202,33 @@ async function detectResistor(imageData) {
     workRotated = rotateImageData(rotated, Math.PI / 2, bg.rgb);
     bg2 = estimateBackground(workRotated);
     mask2 = computeResistorMask(workRotated, bg2, 50);
-    if (mask2.coverage < 0.01) mask2 = computeResistorMask(workRotated, bg2, 30);
+    if (mask2.coverage < 0.005) mask2 = computeResistorMask(workRotated, bg2, 30);
     cc2 = largestComponent(mask2.mask, workRotated.width, workRotated.height);
     if (!cc2) {
-      return { success: false, reason: "Detection failed after re-rotation." };
+      return {
+        success: false,
+        reason: "Detection failed after re-rotation.",
+        debugImage: imageDataToCanvas(workRotated),
+      };
     }
   }
 
   // 7) Body type (carbon-film beige vs metal-film blue) from colour-based mask
   const bodyType = classifyBodyType(workRotated);
 
-  // 8) Crop to body bounds. Trim heavily on X to drop the lead wires and
-  //    rounded shoulders; trim moderately on Y to skip curved edges.
+  // 8) Crop to body bounds.
   const crop = cropToBoundingBox(workRotated, cc2.bounds, 0.22, 0.22);
   if (!crop || crop.width < 30 || crop.height < 8) {
-    return { success: false, reason: "Body too small after rotation." };
+    return {
+      success: false,
+      reason: "The detected resistor is too small. Move the camera closer.",
+      debugImage: imageDataToCanvas(workRotated),
+    };
   }
+
+  // Debug canvas: the cropped resistor strip (what the algorithm will analyze)
+  // We'll overlay markers showing where bands were detected.
+  const debugImage = imageDataToCanvas(crop);
 
   // 9) Sample a 1D color signal along the central strip
   const strip = sampleCentralStrip(crop, 0.45);
@@ -212,18 +239,24 @@ async function detectResistor(imageData) {
   // 11) Detect band columns vs body columns
   const bandRegions = findBandRegions(smooth, bodyType);
 
+  // Annotate the debug image with detected band positions (red rectangles).
+  annotateDebug(debugImage, bandRegions);
+
   if (bandRegions.length < 4 || bandRegions.length > 6) {
     return {
       success: false,
-      reason: `Detected ${bandRegions.length} bands. Expected 4 or 5. Re-check framing/lighting.`,
-      debug: { bandRegions, bodyType, cropWidth: crop.width }
+      reason: bandRegions.length < 4
+        ? `Only ${bandRegions.length} band${bandRegions.length === 1 ? '' : 's'} detected. Try better lighting or a closer shot.`
+        : `Detected ${bandRegions.length} bands. Make sure the whole resistor is in frame on a plain background.`,
+      debugImage,
+      bodyType,
     };
   }
 
   // 12) Classify each band's dominant color
   const classified = bandRegions.map(r => classifyBand(r.meanRgb, r.meanHsv));
 
-  // 13) Pick mode based on band count (collapse 6-band to 5 by dropping last if needed)
+  // 13) Pick mode based on band count
   let mode = bandRegions.length === 4 ? 4 : 5;
   let bands = classified.slice(0, mode === 4 ? 4 : 5);
   if (bandRegions.length === 6) {
@@ -231,9 +264,7 @@ async function detectResistor(imageData) {
     bands = classified.slice(0, 5);
   }
 
-  // 14) Decide reading direction. The "right" orientation has:
-  //     - tolerance-capable color (gold/silver/brown/red/green/blue/violet/gray) as last band
-  //     - AND a valid resistor value
+  // 14) Decide reading direction.
   const decision = pickReadingDirection(bands, mode);
 
   // 15) Compute final ohms/tolerance
@@ -248,7 +279,35 @@ async function detectResistor(imageData) {
     tol: result ? result.tol : null,
     bodyType,
     reasoning: decision.reason,
+    debugImage,
   };
+}
+
+/**
+ * Convert an ImageData to a Canvas (so we can show it in the result view).
+ */
+function imageDataToCanvas(imgData) {
+  const c = document.createElement('canvas');
+  c.width = imgData.width;
+  c.height = imgData.height;
+  c.getContext('2d').putImageData(imgData, 0, 0);
+  return c;
+}
+
+/**
+ * Draw outlines around detected band regions on the debug canvas.
+ * Helps the user see what the scanner identified as bands.
+ */
+function annotateDebug(canvas, bandRegions) {
+  if (!bandRegions || !bandRegions.length) return;
+  const ctx = canvas.getContext('2d');
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 0, 0, 0.85)';
+  for (const r of bandRegions) {
+    if (typeof r.start === 'number' && typeof r.end === 'number') {
+      ctx.strokeRect(r.start, 1, r.end - r.start, canvas.height - 2);
+    }
+  }
 }
 
 // =========================================================

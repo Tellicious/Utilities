@@ -160,8 +160,7 @@ button {
 .tile--placeholder { opacity: 0.55; }
 .tile--placeholder:active { transform: none; background: var(--surface); }
 
-.hub__footer { margin-top: 24px; text-align: center; }
-.hub__hint { font-size: 12px; color: var(--ink-3); }
+/* (hub footer removed) */
 
 /* ============== SHARED SUB-APP CHROME ============== */
 
@@ -231,6 +230,15 @@ button {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+}
+
+.appbar__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  margin-right: 2px;
+  user-select: none;
 }
 
 /* Icon-only appbar button */

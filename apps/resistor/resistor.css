@@ -38,10 +38,7 @@
 }
 
 .resistor-render {
-  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 14px 14px 10px;
+  padding: 8px 0 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -51,20 +48,20 @@
 .resistor-render svg {
   width: 100%;
   max-width: 380px;
-  max-height: 80px;
+  max-height: 84px;
   height: auto;
   display: block;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.06));
 }
 
 /* Inline readout: value + meta on one centered line */
 .picker__readout {
-  margin-top: 8px;
+  margin-top: 10px;
   text-align: center;
+  padding-bottom: 6px;
 }
 
 .result__value {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -72,7 +69,7 @@
 }
 
 .result__meta {
-  margin-top: 2px;
+  margin-top: 3px;
   font-size: 11px;
   color: var(--ink-3);
   min-height: 1.4em;
@@ -80,18 +77,12 @@
 }
 .result__meta .ok { color: var(--good); }
 
-.picker__modes {
-  margin-top: 8px;
-  display: flex;
-  justify-content: center;
-}
-
 /* ======== Columns — fills remaining vertical space ======== */
 
 .picker__columns {
   margin-top: 10px;
   display: grid;
-  gap: 5px;
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
   /* columns set dynamically via inline style */
@@ -120,21 +111,21 @@
 .col__cells {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 .swatch {
   position: relative;
-  border-radius: 7px;
+  border-radius: 9px;
   flex: 1 1 0;
-  min-height: 18px;
+  min-height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.01em;
   cursor: pointer;
@@ -143,6 +134,15 @@
   color: rgba(0,0,0,0.78);
   border: 1px solid transparent;
   padding: 2px 4px;
+}
+
+/* On taller viewports, allow swatches to grow taller */
+@media (min-height: 700px) {
+  .swatch { min-height: 28px; font-size: 14px; }
+  .col__cells { gap: 6px; }
+}
+@media (min-height: 800px) {
+  .swatch { min-height: 32px; font-size: 15px; }
 }
 .swatch--dark-text { color: rgba(0,0,0,0.78); }
 .swatch--light-text { color: rgba(255,255,255,0.95); }
@@ -304,6 +304,7 @@
   border-radius: var(--r-lg);
   z-index: 5;
 }
+.camera__overlay[hidden] { display: none; }
 
 .spinner {
   width: 28px;

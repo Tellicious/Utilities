@@ -58,9 +58,45 @@
   </main>
 
   <script>
+    // Service worker: register, then aggressively check for updates on every
+    // page load. When a new version is found, activate it immediately and
+    // reload the page so the user always sees the latest deployed code.
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(() => {});
+      window.addEventListener('load', async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('sw.js', {
+            // Bypass the HTTP cache for the SW file itself, so updates to
+            // sw.js are detected on every load.
+            updateViaCache: 'none',
+          });
+
+          // Check for an updated SW right now.
+          reg.update().catch(() => {});
+
+          // When a new SW takes control, reload once to get fresh assets.
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          });
+
+          // If a new SW is waiting, tell it to activate immediately.
+          function promoteWaiting(worker) {
+            if (worker && worker.state === 'installed' && navigator.serviceWorker.controller) {
+              worker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          }
+          if (reg.waiting) promoteWaiting(reg.waiting);
+          reg.addEventListener('updatefound', () => {
+            const installing = reg.installing;
+            if (!installing) return;
+            installing.addEventListener('statechange', () => promoteWaiting(installing));
+          });
+        } catch (e) {
+          // SW registration failed (probably http:// or file://) — that's fine,
+          // the app still works without offline support.
+        }
       });
     }
   </script>

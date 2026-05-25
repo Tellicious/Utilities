@@ -200,8 +200,12 @@ button {
   font-size: 17px;
   font-weight: 600;
   flex: 1;
+  min-width: 0;
   text-align: center;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .appbar__spacer { width: 60px; }
@@ -220,6 +224,26 @@ button {
 .appbar__action svg { display: block; }
 .appbar__action:active { background: var(--surface-2); }
 .appbar__action[disabled] { color: var(--ink-3); }
+
+/* Cluster of right-side appbar controls */
+.appbar__cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* Icon-only appbar button */
+.appbar__icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  border-radius: var(--r-sm);
+}
+.appbar__icon svg { display: block; }
+.appbar__icon:active { background: var(--surface-2); }
 
 /* Segmented control (iOS-style) */
 .seg {
@@ -241,4 +265,13 @@ button {
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Compact segment for appbar: short numeric labels */
+.seg--compact .seg__btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 28px;
+  font-variant-numeric: tabular-nums;
 }

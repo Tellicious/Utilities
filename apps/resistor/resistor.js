@@ -141,68 +141,86 @@ function nearestE24(ohms) {
 
 /**
  * Render the resistor as flat SVG.
- * Body shape: classic axial pill with leads on each side.
- * Bands are evenly spaced; tolerance band is offset further to the right
- * to convey reading direction (matches real resistors).
+ * Shape: classic axial resistor with raised shoulder bumps at each end.
+ * Bands are evenly spaced; tolerance band is offset further to the right.
  */
 function renderResistorSVG(bandIds, mode) {
-  const W = 460, H = 130;
+  const W = 460, H = 140;
   const cy = H / 2;
 
-  // Body geometry — pill shape with soft shoulders
-  const bodyX = 80, bodyY = 38, bodyW = 300, bodyH = 60;
-  const r = 18; // more rounded for a softer look
+  // Body geometry
+  //   Main cylinder: bodyX..bodyX+bodyW, height bodyH
+  //   Shoulders: short wider sections at each end (shoulderW wide, shoulderExtraH taller)
+  const bodyX = 84, bodyY = 44, bodyW = 292, bodyH = 52;
+  const shoulderW = 16;
+  const shoulderExtraH = 10; // each side, so total shoulder height = bodyH + 2*extra
+  const shoulderRadius = 7;
+  const bodyRadius = 4;
 
-  // Body color — slightly desaturated for the print/real-resistor feel
+  // Body colour
   const bodyColor = mode === 5 ? '#b8dceb' : '#e8d5a3';
-  const bodyShade = mode === 5 ? '#9ec3d2' : '#cebb87';
+  const bodyShade = mode === 5 ? '#a3c8d8' : '#cebb87';
+  const shoulderColor = mode === 5 ? '#9bc1d2' : '#c9b27e'; // slightly darker
 
-  // Compute band positions
+  // Band placement on the main body
   const nBands = mode === 5 ? 5 : 4;
   const bandW = 22;
-  const leftGroupStart = bodyX + 30;
-  const leftGroupEnd   = bodyX + bodyW * 0.60;
-  const tolX = bodyX + bodyW - 48;
-
-  const leftCount = nBands - 1;
-  const leftStep = leftCount > 1 ? (leftGroupEnd - leftGroupStart) / (leftCount - 1) : 0;
-  const positions = [];
+  // Bands sit only on the flat middle section (avoid shoulders)
+  const bandsStart = bodyX + shoulderW + 12;
+  const bandsEnd   = bodyX + bodyW - shoulderW - 60; // leave room for tolerance band
+  const tolX       = bodyX + bodyW - shoulderW - 18;
+  const leftCount  = nBands - 1;
+  const leftStep   = leftCount > 1 ? (bandsEnd - bandsStart) / (leftCount - 1) : 0;
+  const positions  = [];
   for (let i = 0; i < leftCount; i++) {
-    positions.push(leftGroupStart + i * leftStep);
+    positions.push(bandsStart + i * leftStep);
   }
   positions.push(tolX);
 
-  // Build SVG with defs first
+  // Build SVG
   let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
 
-  // Reusable defs: clip, body gradient, highlight gradient
+  // Defs
+  const shoulderY = bodyY - shoulderExtraH;
+  const shoulderH = bodyH + 2 * shoulderExtraH;
+
   svg += `<defs>`;
-  svg += `<clipPath id="bodyClip"><rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}"/></clipPath>`;
-  // Vertical body gradient for subtle depth
+  // Vertical gradients for cylindrical depth
   svg += `<linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">`;
   svg += `<stop offset="0%" stop-color="${bodyShade}"/>`;
   svg += `<stop offset="22%" stop-color="${bodyColor}"/>`;
   svg += `<stop offset="78%" stop-color="${bodyColor}"/>`;
   svg += `<stop offset="100%" stop-color="${bodyShade}"/>`;
   svg += `</linearGradient>`;
-  // Highlight band near top
+  svg += `<linearGradient id="shoulderGrad" x1="0" y1="0" x2="0" y2="1">`;
+  svg += `<stop offset="0%" stop-color="${shoulderColor}" stop-opacity="0.85"/>`;
+  svg += `<stop offset="50%" stop-color="${shoulderColor}"/>`;
+  svg += `<stop offset="100%" stop-color="${shoulderColor}" stop-opacity="0.85"/>`;
+  svg += `</linearGradient>`;
+  // Highlight band on top
   svg += `<linearGradient id="bodyShine" x1="0" y1="0" x2="0" y2="1">`;
-  svg += `<stop offset="0%" stop-color="rgba(255,255,255,0.35)"/>`;
+  svg += `<stop offset="0%" stop-color="rgba(255,255,255,0.32)"/>`;
   svg += `<stop offset="100%" stop-color="rgba(255,255,255,0)"/>`;
   svg += `</linearGradient>`;
+  // Clip path for bands: only the main body, not the shoulders
+  svg += `<clipPath id="bodyClip">`;
+  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH}" rx="${bodyRadius}" ry="${bodyRadius}"/>`;
+  svg += `</clipPath>`;
   svg += `</defs>`;
 
   // Leads (slightly thicker, soft caps)
-  svg += `<line x1="6" y1="${cy}" x2="${bodyX + 10}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
-  svg += `<line x1="${bodyX + bodyW - 10}" y1="${cy}" x2="${W - 6}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
-  // Tiny lead "kinks" at body for charm
-  svg += `<circle cx="${bodyX + 6}" cy="${cy}" r="2" fill="#b3b0a8"/>`;
-  svg += `<circle cx="${bodyX + bodyW - 6}" cy="${cy}" r="2" fill="#b3b0a8"/>`;
+  svg += `<line x1="6" y1="${cy}" x2="${bodyX + 8}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
+  svg += `<line x1="${bodyX + bodyW - 8}" y1="${cy}" x2="${W - 6}" y2="${cy}" stroke="#b3b0a8" stroke-width="3" stroke-linecap="round"/>`;
 
-  // Body with gradient
-  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}" fill="url(#bodyGrad)"/>`;
+  // Left shoulder (drawn first, sits behind body slightly)
+  svg += `<rect x="${bodyX}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="url(#shoulderGrad)"/>`;
+  // Right shoulder
+  svg += `<rect x="${bodyX + bodyW - shoulderW * 1.8}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="url(#shoulderGrad)"/>`;
 
-  // Bands — clipped to body
+  // Main body cylinder
+  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH}" rx="${bodyRadius}" ry="${bodyRadius}" fill="url(#bodyGrad)"/>`;
+
+  // Bands — clipped to main body only
   svg += `<g clip-path="url(#bodyClip)">`;
   for (let i = 0; i < nBands; i++) {
     const id = bandIds[i];
@@ -210,16 +228,18 @@ function renderResistorSVG(bandIds, mode) {
     const c = COLOR_BY_ID[id];
     if (!c) continue;
     const x = positions[i] - bandW / 2;
-    // White band gets a faint outline so it's visible
     const stroke = (id === 'white') ? ' stroke="#dcdcd6" stroke-width="0.5"' : '';
     svg += `<rect x="${x}" y="${bodyY}" width="${bandW}" height="${bodyH}" fill="${c.hex}"${stroke}/>`;
   }
-  // Subtle highlight overlay on top half of the body
-  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH * 0.42}" fill="url(#bodyShine)"/>`;
+  // Highlight overlay on top half of body
+  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH * 0.45}" fill="url(#bodyShine)"/>`;
   svg += `</g>`;
 
-  // Soft body outline to define silhouette
-  svg += `<rect x="${bodyX}" y="${bodyY}" width="${bodyW}" height="${bodyH}" rx="${r}" ry="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
+  // Soft outline around full silhouette (shoulders + body)
+  // Approximate with two rounded rects for the shoulders + a stroke-only body rect
+  svg += `<rect x="${bodyX}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="none" stroke="rgba(0,0,0,0.10)" stroke-width="1"/>`;
+  svg += `<rect x="${bodyX + bodyW - shoulderW * 1.8}" y="${shoulderY}" width="${shoulderW * 1.8}" height="${shoulderH}" rx="${shoulderRadius}" ry="${shoulderRadius}" fill="none" stroke="rgba(0,0,0,0.10)" stroke-width="1"/>`;
+  svg += `<rect x="${bodyX + shoulderW}" y="${bodyY}" width="${bodyW - 2 * shoulderW}" height="${bodyH}" rx="${bodyRadius}" ry="${bodyRadius}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
 
   svg += `</svg>`;
   return svg;
@@ -232,7 +252,7 @@ const els = {
   resultValue: document.getElementById('resultValue'),
   resultMeta:  document.getElementById('resultMeta'),
   columns:     document.getElementById('pickerColumns'),
-  modeBtns:    document.querySelectorAll('.picker__modes .seg__btn'),
+  modeBtns:    document.querySelectorAll('.appbar .seg__btn'),
   reverseIn:   document.getElementById('reverseInput'),
   reverseGo:   document.getElementById('reverseGo'),
   reverseHint: document.getElementById('reverseHint'),

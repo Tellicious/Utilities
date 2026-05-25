@@ -1,36 +1,32 @@
 // Service worker for Utilities PWA
-// Cache-first strategy: app shell + sub-app assets cached on install,
-// updated on version bump.
+//
+// Strategy: NETWORK-FIRST with cache fallback.
+// On every page load, every request goes to the network first. If the
+// network responds, we serve that (and refresh the cache copy). The cache
+// is only used when offline. This means users always get the latest
+// version when online — no need to reinstall the PWA to see updates.
 
-const VERSION = 'utilities-v1';
-const SHELL_ASSETS = [
+const VERSION = 'utilities-v2-network-first';
+
+// Minimal pre-cache: only what's needed to render *something* offline.
+// Everything else gets cached opportunistically as it's fetched.
+const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './assets/styles.css',
-  './assets/app.js',
-  './apps/resistor/index.html',
-  './apps/resistor/resistor.css',
-  './apps/resistor/resistor.js',
-  './apps/resistor/camera.js',
-  './apps/resistor/cv.js',
-  './assets/icons/icon-192.png',
-  './assets/icons/icon-512.png',
-  './assets/icons/icon-maskable-512.png',
-  './assets/icons/icon-180.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(VERSION).then((cache) => {
-      return Promise.allSettled(
-        SHELL_ASSETS.map((url) =>
+    caches.open(VERSION).then((cache) =>
+      Promise.allSettled(
+        PRECACHE_ASSETS.map((url) =>
           cache.add(url).catch((err) => {
-            console.warn('[SW] skip cache for', url, err.message);
+            console.warn('[SW] precache skip', url, err.message);
           })
         )
-      );
-    }).then(() => self.skipWaiting())
+      )
+    ).then(() => self.skipWaiting())
   );
 });
 
@@ -42,24 +38,59 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Listen for an explicit "skipWaiting" message from the page —
+// used to activate a pending SW immediately without waiting for
+// all tabs to close.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        // Cache successful same-origin responses
-        if (res && res.status === 200 && req.url.startsWith(self.location.origin)) {
-          const clone = res.clone();
-          caches.open(VERSION).then((cache) => cache.put(req, clone));
-        }
-        return res;
-      }).catch(() => {
-        // Offline fallback: try shell
-        if (req.mode === 'navigate') return caches.match('./index.html');
-      });
-    })
-  );
+  // Only handle same-origin requests; let everything else go straight to network.
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(networkFirst(req));
 });
+
+/**
+ * Network-first: try the network. On success, update the cache and return
+ * the fresh response. On failure (offline / network error), fall back to
+ * any cached copy. If nothing's cached either, return a synthetic offline
+ * response for navigations.
+ */
+async function networkFirst(request) {
+  const cache = await caches.open(VERSION);
+  try {
+    // `cache: 'no-store'` makes the browser bypass HTTP cache too,
+    // so we always hit the actual server.
+    const fresh = await fetch(request, { cache: 'no-store' });
+    if (fresh && fresh.status === 200) {
+      // Update cache in the background — don't await, so we return ASAP.
+      cache.put(request, fresh.clone()).catch(() => {});
+    }
+    return fresh;
+  } catch (err) {
+    // Network failed — try cache.
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    // For navigations, fall back to the shell.
+    if (request.mode === 'navigate') {
+      const shell = await cache.match('./index.html');
+      if (shell) return shell;
+    }
+
+    // Nothing we can do — return a stub so the fetch promise resolves.
+    return new Response('Offline and no cached copy available.', {
+      status: 503,
+      statusText: 'Offline',
+      headers: { 'Content-Type': 'text/plain' },
+    });
+  }
+}

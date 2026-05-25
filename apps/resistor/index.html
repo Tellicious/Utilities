@@ -22,31 +22,30 @@
       <span>Utilities</span>
     </a>
     <h1 class="appbar__title">Resistor</h1>
-    <button class="appbar__action" id="openLookup" aria-label="Open reverse lookup">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M16 16l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-      </svg>
-    </button>
+    <div class="appbar__cluster">
+      <div class="seg seg--compact" role="tablist" aria-label="Band count">
+        <button class="seg__btn seg__btn--active" data-bands="4" role="tab" aria-selected="true" aria-label="4-band">4</button>
+        <button class="seg__btn" data-bands="5" role="tab" aria-selected="false" aria-label="5-band">5</button>
+      </div>
+      <button class="appbar__icon" id="openLookup" aria-label="Open reverse lookup">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M16 16l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
   </header>
 
   <!-- ====================== PICKER VIEW ====================== -->
   <section class="view view--picker" id="view-picker" data-active="true">
 
-    <!-- Compact hero: render + value + mode toggle in one block -->
+    <!-- Compact hero: render + value -->
     <div class="picker__top">
       <div class="resistor-render" id="resistorRender" aria-label="Resistor preview"></div>
 
       <div class="picker__readout">
         <div class="result__value" id="resultValue">—</div>
         <div class="result__meta" id="resultMeta"></div>
-      </div>
-
-      <div class="picker__modes">
-        <div class="seg" role="tablist" aria-label="Band count">
-          <button class="seg__btn seg__btn--active" data-bands="4" role="tab" aria-selected="true">4-band</button>
-          <button class="seg__btn" data-bands="5" role="tab" aria-selected="false">5-band</button>
-        </div>
       </div>
     </div>
 
@@ -185,8 +184,33 @@
   <script src="cv.js"></script>
   <script src="camera.js"></script>
   <script>
+    // See hub index.html for explanation. Same logic, different sw path.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('../../sw.js').catch(() => {});
+      (async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('../../sw.js', {
+            updateViaCache: 'none',
+          });
+          reg.update().catch(() => {});
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          });
+          function promoteWaiting(worker) {
+            if (worker && worker.state === 'installed' && navigator.serviceWorker.controller) {
+              worker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          }
+          if (reg.waiting) promoteWaiting(reg.waiting);
+          reg.addEventListener('updatefound', () => {
+            const installing = reg.installing;
+            if (!installing) return;
+            installing.addEventListener('statechange', () => promoteWaiting(installing));
+          });
+        } catch (e) { /* no SW available */ }
+      })();
     }
   </script>
 </body>

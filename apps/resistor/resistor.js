@@ -183,12 +183,11 @@ function renderResistorSVG(bandIds, mode) {
   // Lead bar (from original SVG): y=318.11612 to y=366.6, full width
   // We extend it to a wider viewBox so leads protrude on both sides.
 
-  // ---- ViewBox: tight crop around the resistor ----
-  // Body x range in viewBox coords: roughly 660..1395 (width 735)
-  // Lead y range: 318..366
-  // Body y range: 228..512 (after the layer transform)
-  // Pick a viewBox that gives some lead margin on each side.
-  const VB_X = 500;
+  // ---- ViewBox: tight crop centered around the body ----
+  // Body center x is 1027.5, so viewBox x must be centered there:
+  //   VB_X + VB_W/2 = 1027.5  →  VB_X = 1027.5 - VB_W/2
+  // VB_W = 1150, so VB_X = 1027.5 - 575 = 452.5
+  const VB_X = 452.5;
   const VB_Y = 200;
   const VB_W = 1150;
   const VB_H = 330;

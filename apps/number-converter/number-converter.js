@@ -32,7 +32,7 @@
     const firstGroupLength = clean.length % 2 || 2;
     const groups = [clean.slice(0, firstGroupLength)];
     for (let i = firstGroupLength; i < clean.length; i += 2) groups.push(clean.slice(i, i + 2));
-    return groups.filter(Boolean).join('\u2009');
+    return groups.filter(Boolean).join('\u200A');
   }
 
   function formatHex(num, { padded = false } = {}) {

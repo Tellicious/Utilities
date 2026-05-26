@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#f2f2f7">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -13,11 +15,13 @@
   <title>Number Converter — Utilities</title>
   <script src="../../assets/app.js"></script>
 </head>
+
 <body class="number-app">
   <header class="appbar" id="appbar">
     <a class="appbar__back" href="../../index.html" aria-label="Back">
       <svg width="11" height="18" viewBox="0 0 11 18" fill="none">
-        <path d="M9.5 1.5L1.5 9l8 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9.5 1.5L1.5 9l8 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" />
       </svg>
       <span>Utilities</span>
     </a>
@@ -29,7 +33,8 @@
       <div class="panel__head">
         <label id="decimalLabel" class="panel__label" for="decimalInput">Decimal</label>
       </div>
-      <textarea id="decimalInput" class="value-input" inputmode="numeric" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" rows="1" wrap="off" aria-describedby="statusText"></textarea>
+      <textarea id="decimalInput" class="value-input" inputmode="numeric" autocomplete="off" autocorrect="off"
+        autocapitalize="none" spellcheck="false" rows="1" wrap="off" aria-describedby="statusText"></textarea>
     </section>
 
     <section class="panel panel--input" aria-labelledby="hexLabel">
@@ -37,7 +42,9 @@
         <label id="hexLabel" class="panel__label" for="hexInput">Hex</label>
         <span class="panel__hint">0x optional</span>
       </div>
-      <textarea id="hexInput" class="value-input value-input--mono" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" rows="1" wrap="off" aria-describedby="statusText"></textarea>
+      <textarea id="hexInput" class="value-input value-input--mono" inputmode="text" autocomplete="off"
+        autocorrect="off" autocapitalize="characters" spellcheck="false" rows="1" wrap="off"
+        aria-describedby="statusText"></textarea>
     </section>
 
     <section class="panel panel--binary" aria-labelledby="binaryLabel">
@@ -65,7 +72,7 @@
       (async () => {
         try {
           const reg = await navigator.serviceWorker.register('../../sw.js', { updateViaCache: 'none' });
-          reg.update().catch(() => {});
+          reg.update().catch(() => { });
           let reloaded = false;
           navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (reloaded) return;
@@ -88,4 +95,5 @@
     }
   </script>
 </body>
+
 </html>

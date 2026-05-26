@@ -72,7 +72,7 @@ async function networkFirst(request) {
     const fresh = await fetch(request, { cache: 'no-store' });
     if (fresh && fresh.status === 200) {
       // Update cache in the background — don't await, so we return ASAP.
-      cache.put(request, fresh.clone()).catch(() => {});
+      cache.put(request, fresh.clone()).catch(() => { });
     }
     return fresh;
   } catch (err) {

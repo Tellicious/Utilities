@@ -13,70 +13,70 @@
  *  - darkText: should label text be dark? (visual contrast)
  */
 const COLORS = [
-  { id: 'black',  name: 'Black',  hex: '#1a1a1a', digit: 0, mult: 1,         tol: null,  darkText: false },
-  { id: 'brown',  name: 'Brown',  hex: '#7a4a25', digit: 1, mult: 10,        tol: 1,     darkText: false },
-  { id: 'red',    name: 'Red',    hex: '#d63a3a', digit: 2, mult: 100,       tol: 2,     darkText: false },
-  { id: 'orange', name: 'Orange', hex: '#e89146', digit: 3, mult: 1e3,       tol: null,  darkText: true  },
-  { id: 'yellow', name: 'Yellow', hex: '#f7e36b', digit: 4, mult: 1e4,       tol: null,  darkText: true  },
-  { id: 'green',  name: 'Green',  hex: '#7bcf7e', digit: 5, mult: 1e5,       tol: 0.5,   darkText: true  },
-  { id: 'blue',   name: 'Blue',   hex: '#4f7fd6', digit: 6, mult: 1e6,       tol: 0.25,  darkText: false },
-  { id: 'violet', name: 'Violet', hex: '#cf8ad8', digit: 7, mult: 1e7,       tol: 0.10,  darkText: true  },
-  { id: 'gray',   name: 'Gray',   hex: '#888685', digit: 8, mult: null,      tol: 0.05,  darkText: false },
-  { id: 'white',  name: 'White',  hex: '#ffffff', digit: 9, mult: null,      tol: null,  darkText: true  },
-  { id: 'gold',   name: 'Gold',   hex: '#c89143', digit: null, mult: 0.1,    tol: 5,     darkText: true  },
-  { id: 'silver', name: 'Silver', hex: '#b8b8b8', digit: null, mult: 0.01,   tol: 10,    darkText: true  },
+  { id: 'black', name: 'Black', hex: '#1a1a1a', digit: 0, mult: 1, tol: null, darkText: false },
+  { id: 'brown', name: 'Brown', hex: '#7a4a25', digit: 1, mult: 10, tol: 1, darkText: false },
+  { id: 'red', name: 'Red', hex: '#d63a3a', digit: 2, mult: 100, tol: 2, darkText: false },
+  { id: 'orange', name: 'Orange', hex: '#e89146', digit: 3, mult: 1e3, tol: null, darkText: true },
+  { id: 'yellow', name: 'Yellow', hex: '#f7e36b', digit: 4, mult: 1e4, tol: null, darkText: true },
+  { id: 'green', name: 'Green', hex: '#7bcf7e', digit: 5, mult: 1e5, tol: 0.5, darkText: true },
+  { id: 'blue', name: 'Blue', hex: '#4f7fd6', digit: 6, mult: 1e6, tol: 0.25, darkText: false },
+  { id: 'violet', name: 'Violet', hex: '#cf8ad8', digit: 7, mult: 1e7, tol: 0.10, darkText: true },
+  { id: 'gray', name: 'Gray', hex: '#888685', digit: 8, mult: null, tol: 0.05, darkText: false },
+  { id: 'white', name: 'White', hex: '#ffffff', digit: 9, mult: null, tol: null, darkText: true },
+  { id: 'gold', name: 'Gold', hex: '#c89143', digit: null, mult: 0.1, tol: 5, darkText: true },
+  { id: 'silver', name: 'Silver', hex: '#b8b8b8', digit: null, mult: 0.01, tol: 10, darkText: true },
 ];
 
 const COLOR_BY_ID = Object.fromEntries(COLORS.map(c => [c.id, c]));
 
 // Which colors are valid in each band slot
 const VALID = {
-  digit:      COLORS.filter(c => c.digit !== null).map(c => c.id),
+  digit: COLORS.filter(c => c.digit !== null).map(c => c.id),
   multiplier: COLORS.filter(c => c.mult !== null).map(c => c.id),
-  tolerance:  COLORS.filter(c => c.tol !== null).map(c => c.id),
+  tolerance: COLORS.filter(c => c.tol !== null).map(c => c.id),
 };
 
 // IEC 60063 standard E-series of preferred values for resistors.
 // Each list covers one decade [10, 100); to find any value, scale by a power of 10.
 // E6..E24 use 2-significant-digit values; E48..E192 use 3-significant-digit values.
 const E_SERIES = {
-  E6:   [10, 15, 22, 33, 47, 68],
+  E6: [10, 15, 22, 33, 47, 68],
 
-  E12:  [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82],
+  E12: [10, 12, 15, 18, 22, 27, 33, 39, 47, 56, 68, 82],
 
-  E24:  [10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30,
-         33, 36, 39, 43, 47, 51, 56, 62, 68, 75, 82, 91],
+  E24: [10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30,
+    33, 36, 39, 43, 47, 51, 56, 62, 68, 75, 82, 91],
 
-  E48:  [100, 105, 110, 115, 121, 127, 133, 140, 147, 154, 162, 169,
-         178, 187, 196, 205, 215, 226, 237, 249, 261, 274, 287, 301,
-         316, 332, 348, 365, 383, 402, 422, 442, 464, 487, 511, 536,
-         562, 590, 619, 649, 681, 715, 750, 787, 825, 866, 909, 953],
+  E48: [100, 105, 110, 115, 121, 127, 133, 140, 147, 154, 162, 169,
+    178, 187, 196, 205, 215, 226, 237, 249, 261, 274, 287, 301,
+    316, 332, 348, 365, 383, 402, 422, 442, 464, 487, 511, 536,
+    562, 590, 619, 649, 681, 715, 750, 787, 825, 866, 909, 953],
 
-  E96:  [100, 102, 105, 107, 110, 113, 115, 118, 121, 124, 127, 130,
-         133, 137, 140, 143, 147, 150, 154, 158, 162, 165, 169, 174,
-         178, 182, 187, 191, 196, 200, 205, 210, 215, 221, 226, 232,
-         237, 243, 249, 255, 261, 267, 274, 280, 287, 294, 301, 309,
-         316, 324, 332, 340, 348, 357, 365, 374, 383, 392, 402, 412,
-         422, 432, 442, 453, 464, 475, 487, 499, 511, 523, 536, 549,
-         562, 576, 590, 604, 619, 634, 649, 665, 681, 698, 715, 732,
-         750, 768, 787, 806, 825, 845, 866, 887, 909, 931, 953, 976],
+  E96: [100, 102, 105, 107, 110, 113, 115, 118, 121, 124, 127, 130,
+    133, 137, 140, 143, 147, 150, 154, 158, 162, 165, 169, 174,
+    178, 182, 187, 191, 196, 200, 205, 210, 215, 221, 226, 232,
+    237, 243, 249, 255, 261, 267, 274, 280, 287, 294, 301, 309,
+    316, 324, 332, 340, 348, 357, 365, 374, 383, 392, 402, 412,
+    422, 432, 442, 453, 464, 475, 487, 499, 511, 523, 536, 549,
+    562, 576, 590, 604, 619, 634, 649, 665, 681, 698, 715, 732,
+    750, 768, 787, 806, 825, 845, 866, 887, 909, 931, 953, 976],
 
   E192: [100, 101, 102, 104, 105, 106, 107, 109, 110, 111, 113, 114,
-         115, 117, 118, 120, 121, 123, 124, 126, 127, 129, 130, 132,
-         133, 135, 137, 138, 140, 142, 143, 145, 147, 149, 150, 152,
-         154, 156, 158, 160, 162, 164, 165, 167, 169, 172, 174, 176,
-         178, 180, 182, 184, 187, 189, 191, 193, 196, 198, 200, 203,
-         205, 208, 210, 213, 215, 218, 221, 223, 226, 229, 232, 234,
-         237, 240, 243, 246, 249, 252, 255, 258, 261, 264, 267, 271,
-         274, 277, 280, 284, 287, 291, 294, 298, 301, 305, 309, 312,
-         316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 357, 361,
-         365, 370, 374, 379, 383, 388, 392, 397, 402, 407, 412, 417,
-         422, 427, 432, 437, 442, 448, 453, 459, 464, 470, 475, 481,
-         487, 493, 499, 505, 511, 517, 523, 530, 536, 542, 549, 556,
-         562, 569, 576, 583, 590, 597, 604, 612, 619, 626, 634, 642,
-         649, 657, 665, 673, 681, 690, 698, 706, 715, 723, 732, 741,
-         750, 759, 768, 777, 787, 796, 806, 816, 825, 835, 845, 856,
-         866, 876, 887, 898, 909, 920, 931, 942, 953, 965, 976, 988],
+    115, 117, 118, 120, 121, 123, 124, 126, 127, 129, 130, 132,
+    133, 135, 137, 138, 140, 142, 143, 145, 147, 149, 150, 152,
+    154, 156, 158, 160, 162, 164, 165, 167, 169, 172, 174, 176,
+    178, 180, 182, 184, 187, 189, 191, 193, 196, 198, 200, 203,
+    205, 208, 210, 213, 215, 218, 221, 223, 226, 229, 232, 234,
+    237, 240, 243, 246, 249, 252, 255, 258, 261, 264, 267, 271,
+    274, 277, 280, 284, 287, 291, 294, 298, 301, 305, 309, 312,
+    316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 357, 361,
+    365, 370, 374, 379, 383, 388, 392, 397, 402, 407, 412, 417,
+    422, 427, 432, 437, 442, 448, 453, 459, 464, 470, 475, 481,
+    487, 493, 499, 505, 511, 517, 523, 530, 536, 542, 549, 556,
+    562, 569, 576, 583, 590, 597, 604, 612, 619, 626, 634, 642,
+    649, 657, 665, 673, 681, 690, 698, 706, 715, 723, 732, 741,
+    750, 759, 768, 777, 787, 796, 806, 816, 825, 835, 845, 856,
+    866, 876, 887, 898, 909, 920, 931, 942, 953, 965, 976, 988],
 };
 
 // Map a tolerance (%) to the corresponding E-series name.
@@ -87,9 +87,9 @@ function eSeriesForTolerance(tol) {
   if (tol === null || tol === undefined) return 'E24';      // unknown → safe default
   if (tol >= 20) return 'E6';
   if (tol >= 10) return 'E12';
-  if (tol >= 5)  return 'E24';
-  if (tol >= 2)  return 'E48';
-  if (tol >= 1)  return 'E96';
+  if (tol >= 5) return 'E24';
+  if (tol >= 2) return 'E48';
+  if (tol >= 1) return 'E96';
   return 'E192';                                            // 0.5%, 0.25%, 0.1%
 }
 
@@ -157,10 +157,10 @@ function formatOhms(ohms) {
 
   const abs = Math.abs(ohms);
   let value, unit;
-  if (abs >= 1e9)      { value = ohms / 1e9; unit = 'GΩ'; }
+  if (abs >= 1e9) { value = ohms / 1e9; unit = 'GΩ'; }
   else if (abs >= 1e6) { value = ohms / 1e6; unit = 'MΩ'; }
   else if (abs >= 1e3) { value = ohms / 1e3; unit = 'kΩ'; }
-  else                 { value = ohms;       unit = 'Ω';  }
+  else { value = ohms; unit = 'Ω'; }
 
   // Trim trailing zeros but keep up to 3 sig figs after decimal
   let str;
@@ -309,17 +309,17 @@ function renderResistorSVG(bandIds, mode) {
 // -------------------- DOM ELEMENTS --------------------
 
 const els = {
-  render:      document.getElementById('resistorRender'),
+  render: document.getElementById('resistorRender'),
   resultValue: document.getElementById('resultValue'),
-  resultMeta:  document.getElementById('resultMeta'),
-  columns:     document.getElementById('pickerColumns'),
-  modeBtns:    document.querySelectorAll('.appbar .seg__btn'),
-  reverseIn:   document.getElementById('reverseInput'),
-  reverseGo:   document.getElementById('reverseGo'),
+  resultMeta: document.getElementById('resultMeta'),
+  columns: document.getElementById('pickerColumns'),
+  modeBtns: document.querySelectorAll('.appbar .seg__btn'),
+  reverseIn: document.getElementById('reverseInput'),
+  reverseGo: document.getElementById('reverseGo'),
   reverseHint: document.getElementById('reverseHint'),
-  appbar:      document.getElementById('appbar'),
-  openLookup:  document.getElementById('openLookup'),
-  sheet:       document.getElementById('lookupSheet'),
+  appbar: document.getElementById('appbar'),
+  openLookup: document.getElementById('openLookup'),
+  sheet: document.getElementById('lookupSheet'),
 };
 
 // -------------------- COLUMNS RENDERING --------------------
@@ -359,9 +359,9 @@ function renderColumns() {
 
       // Label content depends on column type
       let label = '';
-      if (kind === 'digit')           label = c.digit !== null ? String(c.digit) : '';
+      if (kind === 'digit') label = c.digit !== null ? String(c.digit) : '';
       else if (kind === 'multiplier') label = c.mult !== null ? formatMultiplierLabel(c.mult) : '';
-      else if (kind === 'tolerance')  label = c.tol !== null ? `±${c.tol}%` : '';
+      else if (kind === 'tolerance') label = c.tol !== null ? `±${c.tol}%` : '';
 
       sw.innerHTML = `<span class="swatch__label">${label}</span>`;
 
@@ -385,11 +385,11 @@ function renderColumns() {
 
 function formatMultiplierLabel(m) {
   if (m === 0.01) return '×0.01';
-  if (m === 0.1)  return '×0.1';
-  if (m < 1000)   return `×${m}`;
-  if (m < 1e6)    return `×${m/1e3}k`;
-  if (m < 1e9)    return `×${m/1e6}M`;
-  return `×${m/1e9}G`;
+  if (m === 0.1) return '×0.1';
+  if (m < 1000) return `×${m}`;
+  if (m < 1e6) return `×${m / 1e3}k`;
+  if (m < 1e9) return `×${m / 1e6}M`;
+  return `×${m / 1e9}G`;
 }
 
 function onSwatchClick(slotIdx, colorId) {
@@ -402,7 +402,7 @@ function onSwatchClick(slotIdx, colorId) {
 
 // Tiny haptic for iOS (some Safari versions ignore it but it's harmless)
 function haptic() {
-  if (navigator.vibrate) try { navigator.vibrate(8); } catch (_) {}
+  if (navigator.vibrate) try { navigator.vibrate(8); } catch (_) { }
 }
 
 // -------------------- TOP-LEVEL RENDER --------------------
@@ -609,7 +609,7 @@ function switchView(name) {
 tabBtns.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 
 // Expose to camera module: apply detected bands and switch to picker
-window.applyDetectedBands = function(picks, mode) {
+window.applyDetectedBands = function (picks, mode) {
   state.mode = mode;
   els.modeBtns.forEach(x => {
     const active = Number(x.dataset.bands) === mode;

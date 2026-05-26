@@ -1,11 +1,12 @@
-(()=>{'use strict';
-let mode='non';
-const $=id=>document.getElementById(id);
-function n(id){return Number(String($(id).value).replace(',','.'))}
-function schematic(){
-  const el=$('opSchematic'); if(!el)return;
-  if(mode==='inv'){
-    el.innerHTML=`<svg viewBox="0 0 544 302" fill="none" aria-label="Inverting amplifier schematic">
+(() => {
+  'use strict';
+  let mode = 'non';
+  const $ = id => document.getElementById(id);
+  function n(id) { return Number(String($(id).value).replace(',', '.')) }
+  function schematic() {
+    const el = $('opSchematic'); if (!el) return;
+    if (mode === 'inv') {
+      el.innerHTML = `<svg viewBox="0 0 544 302" fill="none" aria-label="Inverting amplifier schematic">
       <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="244,103 244,249 389,176" fill="none"/>
 
@@ -37,8 +38,8 @@ function schematic(){
         <text x="256" y="228" style="font-size:38px;">+</text>
       </g>
     </svg>`;
-  } else {
-    el.innerHTML=`<svg viewBox="-42.5 0 544 428" fill="none" aria-label="Non-inverting amplifier schematic">
+    } else {
+      el.innerHTML = `<svg viewBox="-42.5 0 544 428" fill="none" aria-label="Non-inverting amplifier schematic">
       <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="136,20 136,177 292,98" fill="none"/>
 
@@ -71,8 +72,9 @@ function schematic(){
         <text x="148" y="150" style="font-size:38px;">−</text>
       </g>
     </svg>`;
+    }
   }
-}
-function set(m){mode=m;$('noninv').classList.toggle('seg__btn--active',m==='non');$('inv').classList.toggle('seg__btn--active',m==='inv');schematic();render()}
-function render(){const rin=n('rin'),rf=n('rf'),out=$('opValue'),meta=$('opMeta');if(!(rin>0&&rf>=0)){out.textContent='—';meta.textContent='Enter positive resistor values.';return}const g=mode==='non'?1+rf/rin:-(rf/rin);out.textContent=`${Number(g.toPrecision(5))}×`;meta.textContent=mode==='non'?`Non-inverting: Av = 1 + Rf/Rin`:`Inverting: Av = -Rf/Rin`}
-['rin','rf'].forEach(id=>$(id).addEventListener('input',render));$('noninv').onclick=()=>set('non');$('inv').onclick=()=>set('inv');set('non');})();
+  function set(m) { mode = m; $('noninv').classList.toggle('seg__btn--active', m === 'non'); $('inv').classList.toggle('seg__btn--active', m === 'inv'); schematic(); render() }
+  function render() { const rin = n('rin'), rf = n('rf'), out = $('opValue'), meta = $('opMeta'); if (!(rin > 0 && rf >= 0)) { out.textContent = '—'; meta.textContent = 'Enter positive resistor values.'; return } const g = mode === 'non' ? 1 + rf / rin : -(rf / rin); out.textContent = `${Number(g.toPrecision(5))}×`; meta.textContent = mode === 'non' ? `Non-inverting: Av = 1 + Rf/Rin` : `Inverting: Av = -Rf/Rin` }
+  ['rin', 'rf'].forEach(id => $(id).addEventListener('input', render)); $('noninv').onclick = () => set('non'); $('inv').onclick = () => set('inv'); set('non');
+})();

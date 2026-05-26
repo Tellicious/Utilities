@@ -3,29 +3,29 @@
    ========================================================= */
 
 const cam = {
-  video:      document.getElementById('camVideo'),
-  shutter:    document.getElementById('camShutter'),
-  pickFile:   document.getElementById('camPickFile'),
-  flip:       document.getElementById('camFlip'),
-  fileInput:  document.getElementById('camFileInput'),
-  stage:      document.getElementById('cameraStage'),
-  loading:    document.getElementById('camLoading'),
+  video: document.getElementById('camVideo'),
+  shutter: document.getElementById('camShutter'),
+  pickFile: document.getElementById('camPickFile'),
+  flip: document.getElementById('camFlip'),
+  fileInput: document.getElementById('camFileInput'),
+  stage: document.getElementById('cameraStage'),
+  loading: document.getElementById('camLoading'),
   loadingTxt: document.getElementById('camLoadingText'),
-  result:     document.getElementById('camResult'),
-  resultTitle:document.getElementById('camResultTitle'),
-  retake:     document.getElementById('camRetake'),
+  result: document.getElementById('camResult'),
+  resultTitle: document.getElementById('camResultTitle'),
+  retake: document.getElementById('camRetake'),
   openPicker: document.getElementById('camOpenPicker'),
-  photoCanvas:document.getElementById('camPhotoCanvas'),
-  render:     document.getElementById('camRender'),
-  value:      document.getElementById('camValue'),
-  meta:       document.getElementById('camMeta'),
-  bands:      document.getElementById('camBands'),
-  hint:       document.getElementById('camHint'),
-  debug:      document.getElementById('camDebug'),
-  debugImg:   document.getElementById('camDebugImg'),
-  error:      document.getElementById('camError'),
-  errorText:  document.getElementById('camErrorText'),
-  pickFallback:document.getElementById('camPickFallback'),
+  photoCanvas: document.getElementById('camPhotoCanvas'),
+  render: document.getElementById('camRender'),
+  value: document.getElementById('camValue'),
+  meta: document.getElementById('camMeta'),
+  bands: document.getElementById('camBands'),
+  hint: document.getElementById('camHint'),
+  debug: document.getElementById('camDebug'),
+  debugImg: document.getElementById('camDebugImg'),
+  error: document.getElementById('camError'),
+  errorText: document.getElementById('camErrorText'),
+  pickFallback: document.getElementById('camPickFallback'),
 
   stream: null,
   facingMode: 'environment',
@@ -69,8 +69,8 @@ function showError(err) {
   const msg = (err && err.name === 'NotAllowedError')
     ? "Camera permission was denied. Allow access in Settings or pick a photo instead."
     : (err && err.name === 'NotFoundError')
-    ? "No camera available on this device."
-    : "Camera couldn't start: " + (err && err.message ? err.message : 'unknown error');
+      ? "No camera available on this device."
+      : "Camera couldn't start: " + (err && err.message ? err.message : 'unknown error');
   cam.errorText.textContent = msg;
 }
 

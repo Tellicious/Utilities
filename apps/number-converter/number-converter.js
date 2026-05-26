@@ -59,23 +59,44 @@
     statusText.classList.toggle('status--ok', Boolean(message && !isError));
   }
 
+  function measureTextWidth(text, input, sizePx) {
+    const probe = document.createElement('span');
+    const styles = window.getComputedStyle(input);
+    probe.textContent = text;
+    probe.style.position = 'fixed';
+    probe.style.left = '-9999px';
+    probe.style.top = '-9999px';
+    probe.style.visibility = 'hidden';
+    probe.style.whiteSpace = 'nowrap';
+    probe.style.fontFamily = styles.fontFamily;
+    probe.style.fontWeight = styles.fontWeight;
+    probe.style.fontVariantNumeric = 'tabular-nums';
+    probe.style.letterSpacing = styles.letterSpacing;
+    probe.style.fontSize = `${sizePx}px`;
+    document.body.appendChild(probe);
+    const width = probe.getBoundingClientRect().width;
+    probe.remove();
+    return width;
+  }
 
-  function fitValueInput(input, preferredPx, minimumPx) {
-    input.style.fontSize = `${preferredPx}px`;
-    // Let layout settle, then shrink just enough to keep UINT64 values on one line.
-    requestAnimationFrame(() => {
-      let size = preferredPx;
-      while (size > minimumPx && input.scrollWidth > input.clientWidth + 1) {
-        size -= 0.5;
-        input.style.fontSize = `${size}px`;
-      }
-      input.scrollLeft = input.scrollWidth;
-    });
+  function fitFontForMax(input, sample, preferredPx, minimumPx) {
+    const styles = window.getComputedStyle(input);
+    const available = input.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight) - 2;
+    let lo = minimumPx;
+    let hi = preferredPx;
+    for (let i = 0; i < 12; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (measureTextWidth(sample, input, mid) <= available) lo = mid;
+      else hi = mid;
+    }
+    return Math.floor(lo * 10) / 10;
   }
 
   function fitValueInputs() {
-    fitValueInput(decimalInput, 32, 23);
-    fitValueInput(hexInput, 32, 23);
+    const decimalMax = formatDecimal(MAX_VALUE);
+    const hexMax = formatHex(MAX_VALUE);
+    document.documentElement.style.setProperty('--decimal-font-size', `${fitFontForMax(decimalInput, decimalMax, 34, 20)}px`);
+    document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 34, 22)}px`);
   }
 
   function renderBinary(num) {
@@ -95,7 +116,6 @@
     if (source !== 'decimal') decimalInput.value = formatDecimal(value);
     if (source !== 'hex') hexInput.value = formatHex(value);
     renderBinary(value);
-    fitValueInputs();
     isRendering = false;
   }
 
@@ -111,7 +131,6 @@
     if (!parsed.empty) {
       const input = source === 'decimal' ? decimalInput : hexInput;
       input.value = source === 'decimal' ? formatDecimal(value) : formatHex(value);
-      fitValueInputs();
       input.setSelectionRange(input.value.length, input.value.length);
     }
   }
@@ -170,7 +189,6 @@
   hexInput.addEventListener('blur', () => {
     if (!hexInput.value.trim()) return;
     hexInput.value = formatHex(value);
-    fitValueInputs();
   });
 
   clearBtn.addEventListener('click', () => {
@@ -179,7 +197,6 @@
     hexInput.value = '';
     setStatus('');
     renderBinary(value);
-    fitValueInputs();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
 
@@ -190,6 +207,6 @@
   }, { passive: true });
 
   buildBinaryGrid();
-  renderBinary(value);
   fitValueInputs();
+  renderBinary(value);
 })();

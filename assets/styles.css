@@ -313,7 +313,7 @@ button {
 .tool-label { display:block; color:var(--ink-2); font-size:12px; margin-bottom:6px; }
 .tool-input, .tool-select { width:100%; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2); color:var(--ink); padding:12px 13px; font:600 19px/1.1 var(--font-sans); outline:none; }
 .tool-input:focus, .tool-select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
-.tool-result { margin-top:14px; padding:14px; border-radius:var(--r-md); background:var(--surface-2); }
+.tool-result { margin-top:14px; padding:14px; border-radius:var(--r-md); background: rgba(0, 122, 255, 0.10); border: 1px solid rgba(0, 122, 255, 0.18); }
 .tool-result__value { font-size:28px; line-height:1.05; font-weight:750; letter-spacing:-.035em; }
 .tool-result__meta { margin-top:6px; color:var(--ink-2); font-size:14px; }
 .tool-note { margin:8px 0 0; color:var(--ink-3); font-size:13px; }
@@ -367,7 +367,7 @@ button {
   color:var(--ink-2);
 }
 .mini-schematic svg { display:block; width:100%; height:auto; }
-.mini-schematic text { fill:var(--ink-2); font:600 11px var(--font-sans); }
+.mini-schematic text { fill:var(--ink-2); font-weight:600; font-family:var(--font-sans); }
 .mini-schematic path,
 .mini-schematic line,
 .mini-schematic polyline,

@@ -18,7 +18,7 @@
   }
 
   function normalizeHex(raw) {
-    return raw.trim().replace(/^0x/i, '').replace(/[ _\s\u2009]/g, '');
+    return raw.trim().replace(/^0x/i, '').replace(/[ _\s\u2009\u200A]/g, '');
   }
 
   function formatDecimal(num) {
@@ -27,7 +27,7 @@
 
   function formatHex(num) {
     const hex = num.toString(16).toUpperCase();
-    return hex.replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, '\u2009');
+    return hex.replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, '\u200A');
   }
 
   function parseDecimal(raw) {
@@ -59,6 +59,25 @@
     statusText.classList.toggle('status--ok', Boolean(message && !isError));
   }
 
+
+  function fitValueInput(input, preferredPx, minimumPx) {
+    input.style.fontSize = `${preferredPx}px`;
+    // Let layout settle, then shrink just enough to keep UINT64 values on one line.
+    requestAnimationFrame(() => {
+      let size = preferredPx;
+      while (size > minimumPx && input.scrollWidth > input.clientWidth + 1) {
+        size -= 0.5;
+        input.style.fontSize = `${size}px`;
+      }
+      input.scrollLeft = input.scrollWidth;
+    });
+  }
+
+  function fitValueInputs() {
+    fitValueInput(decimalInput, 31, 22);
+    fitValueInput(hexInput, 31, 22);
+  }
+
   function renderBinary(num) {
     const bits = toBinary64(num);
     binaryGrid.querySelectorAll('.bit-btn').forEach((button) => {
@@ -76,6 +95,7 @@
     if (source !== 'decimal') decimalInput.value = formatDecimal(value);
     if (source !== 'hex') hexInput.value = formatHex(value);
     renderBinary(value);
+    fitValueInputs();
     isRendering = false;
   }
 
@@ -91,6 +111,7 @@
     if (!parsed.empty) {
       const input = source === 'decimal' ? decimalInput : hexInput;
       input.value = source === 'decimal' ? formatDecimal(value) : formatHex(value);
+      fitValueInputs();
       input.setSelectionRange(input.value.length, input.value.length);
     }
   }
@@ -149,6 +170,7 @@
   hexInput.addEventListener('blur', () => {
     if (!hexInput.value.trim()) return;
     hexInput.value = formatHex(value);
+    fitValueInputs();
   });
 
   clearBtn.addEventListener('click', () => {
@@ -157,8 +179,11 @@
     hexInput.value = '';
     setStatus('');
     renderBinary(value);
+    fitValueInputs();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
+
+  window.addEventListener('resize', fitValueInputs);
 
   window.addEventListener('scroll', () => {
     document.getElementById('appbar').classList.toggle('appbar--scrolled', window.scrollY > 2);
@@ -166,4 +191,5 @@
 
   buildBinaryGrid();
   renderBinary(value);
+  fitValueInputs();
 })();

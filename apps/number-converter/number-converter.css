@@ -72,24 +72,28 @@
   resize: none;
   background: transparent;
   color: var(--ink);
-  padding: 28px 20px 14px 20px;
-  font: 650 var(--decimal-font-size, 25px)/1 var(--font-sans);
-  text-align: right;
-  letter-spacing: -0.045em;
+  padding: 30px 20px 12px 20px;
+
+  font-family: var(--font-mono);
+  font-size: var(--decimal-font-size, 26px);
+  font-weight: 650;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+
+  text-align: right;
+  letter-spacing: -0.035em;
   white-space: nowrap;
   overflow: hidden;
   scrollbar-width: none;
 }
-
 .value-input::-webkit-scrollbar { display: none; }
 
 .value-input--mono {
   font-family: var(--font-mono);
-  font-size: var(--hex-font-size, 30px);
-  letter-spacing: -0.04em;
+  font-size: var(--hex-font-size, 31px);
+  letter-spacing: -0.025em;
 }
-
 .value-input::placeholder { color: var(--ink-3); }
 .value-input:focus { background: color-mix(in srgb, var(--accent-soft) 24%, transparent); }
 

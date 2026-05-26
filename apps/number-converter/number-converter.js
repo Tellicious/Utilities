@@ -19,7 +19,7 @@
   }
 
   function normalizeHex(raw) {
-    return raw.trim().replace(/^0x/i, '').replace(/[ _\s\u2009\u200A]/g, '');
+    return raw.trim().replace(/^0x/i, '').replace(/[._\s\u2009\u200A]/g, '');
   }
 
   function formatDecimal(num) {
@@ -27,8 +27,8 @@
   }
 
   function formatHex(num) {
-    const hex = num.toString(16).toUpperCase();
-    return hex.replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, '\u200A');
+    const hex = num.toString(16).toUpperCase().padStart(16, '0');
+    return hex.match(/.{1,2}/g).join('\u2009');
   }
 
   function parseDecimal(raw) {
@@ -97,7 +97,7 @@
     const decimalMax = formatDecimal(MAX_VALUE);
     const hexMax = formatHex(MAX_VALUE);
     document.documentElement.style.setProperty('--decimal-font-size', `${fitFontForMax(decimalInput, decimalMax, 35, 20)}px`);
-    document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 35, 22)}px`);
+    document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 32, 22)}px`);
   }
 
   function signed64(num) { return num >= (1n << 63n) ? num - (1n << 64n) : num; }

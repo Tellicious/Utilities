@@ -18,7 +18,7 @@
   }
 
   function normalizeHex(raw) {
-    return raw.trim().replace(/^0x/i, '').replace(/[ _\s]/g, '');
+    return raw.trim().replace(/^0x/i, '').replace(/[ _\s\u2009]/g, '');
   }
 
   function formatDecimal(num) {
@@ -27,7 +27,7 @@
 
   function formatHex(num) {
     const hex = num.toString(16).toUpperCase();
-    return hex.replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, ' ');
+    return hex.replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, '\u2009');
   }
 
   function parseDecimal(raw) {
@@ -85,7 +85,7 @@
       return;
     }
     value = parsed.value;
-    setStatus(parsed.empty ? '' : '64-bit unsigned integer', false);
+    setStatus('', false);
     render(source);
 
     if (!parsed.empty) {
@@ -107,7 +107,6 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'bit-btn';
-        if (col === 7) button.classList.add('bit-btn--byte-gap');
         button.dataset.bit = String(bit);
         button.addEventListener('click', () => flipBit(bit));
         rowEl.appendChild(button);
@@ -118,12 +117,9 @@
       for (let col = 0; col < 16; col += 1) {
         const label = document.createElement('span');
         label.className = 'bit-label';
-        if (col === 7) label.classList.add('bit-label--byte-gap');
-        if (col === 0) label.textContent = String(topBit);
-        if (row === 3 && col === 15) {
-          label.textContent = '0';
-          label.classList.add('bit-label--end');
-        }
+        const bit = topBit - col;
+        if (bit % 8 === 7 || bit === 0) label.textContent = String(bit);
+        if (bit === 0) label.classList.add('bit-label--end');
         labels.appendChild(label);
       }
 
@@ -136,7 +132,7 @@
 
   function flipBit(bit) {
     value ^= (1n << BigInt(bit));
-    setStatus('64-bit unsigned integer', false);
+    setStatus('', false);
     render('binary');
   }
 
@@ -161,7 +157,7 @@
     hexInput.value = '';
     setStatus('');
     renderBinary(value);
-    decimalInput.focus();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
 
   window.addEventListener('scroll', () => {

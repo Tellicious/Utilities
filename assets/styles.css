@@ -322,3 +322,96 @@ button {
 .settings-item:last-child { border-bottom:0; }
 .settings-item strong { display:block; font-size:16px; }
 .settings-item span { color:var(--ink-3); font-size:13px; }
+
+
+/* ============== POLISHED CONTROLS / MINI SCHEMATICS ============== */
+.hub__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin-left: -20px;
+  margin-right: -20px;
+  padding: calc(var(--safe-top) + 16px) 20px 18px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+}
+.control-stack { display:flex; flex-direction:column; gap:10px; margin:4px 0 14px; }
+.pill-seg {
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap:4px;
+  padding:4px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--r-pill);
+}
+.pill-seg .seg__btn {
+  border-radius:var(--r-pill);
+  padding:10px 12px;
+  font-size:15px;
+  font-weight:650;
+  color:var(--ink-2);
+}
+.pill-seg .seg__btn--active {
+  background:var(--surface);
+  color:var(--accent);
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.mini-schematic {
+  margin:10px 0 14px;
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  background:var(--surface-2);
+  padding:10px;
+  color:var(--ink-2);
+}
+.mini-schematic svg { display:block; width:100%; height:auto; }
+.mini-schematic text { fill:var(--ink-2); font:600 11px var(--font-sans); }
+.mini-schematic path,
+.mini-schematic line,
+.mini-schematic polyline,
+.mini-schematic polygon,
+.mini-schematic circle { vector-effect:non-scaling-stroke; }
+.tool-result__value { font-variant-numeric: tabular-nums; }
+
+
+/* Input alignment polish: numeric fields right-aligned, units centered vertically */
+.tool-row { align-items: end; grid-template-columns: minmax(0, 1fr) minmax(38px, auto); }
+.tool-row > span,
+.tool-unit,
+.tool-unit-select {
+  align-self: end;
+  min-height: 45px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-2);
+  font-weight: 650;
+  font-size: 15px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tool-input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+.tool-unit-select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 45px;
+  min-width: 70px;
+  padding: 0 26px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--ink);
+  outline: none;
+  text-align: center;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 19px, calc(100% - 9px) 19px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.tool-unit-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

@@ -24,14 +24,18 @@
             <p class="tool-note">Enter any one field; the others update live.</p>
             <div class="tool-row"><label><span class="tool-label">AWG</span><input id="awg" class="tool-input"
                         inputmode="numeric" step="1" placeholder="24"></label><span class="tool-unit"></span></div>
-            <div class="tool-row"><label><span class="tool-label">Diameter</span><input id="mm" class="tool-input"
-                        inputmode="decimal"></label><span class="tool-unit">mm</span></div>
-            <div class="tool-row"><label><span class="tool-label">Section area</span><input id="mm2" class="tool-input"
-                        inputmode="decimal"></label><span class="tool-unit">mm²</span></div>
-            <div class="tool-row"><label><span class="tool-label">Diameter</span><input id="inch" class="tool-input"
-                        inputmode="decimal"></label><span class="tool-unit">in</span></div>
-            <div class="tool-row"><label><span class="tool-label">Area</span><input id="in2" class="tool-input"
-                        inputmode="decimal"></label><span class="tool-unit">in²</span></div>
+            <div class="tool-row-group">
+                <div class="tool-row"><label><span class="tool-label">Diameter</span><input id="mm" class="tool-input"
+                            inputmode="decimal"></label><span class="tool-unit">mm</span></div>
+                <div class="tool-row"><label><input id="inch" class="tool-input" inputmode="decimal"></label><span
+                        class="tool-unit">in</span></div>
+            </div>
+            <div class="tool-row-group">
+                <div class="tool-row"><label><span class="tool-label">Section area</span><input id="mm2"
+                            class="tool-input" inputmode="decimal"></label><span class="tool-unit">mm²</span></div>
+                <div class="tool-row"><label><input id="in2" class="tool-input" inputmode="decimal"></label><span
+                        class="tool-unit">in²</span></div>
+            </div>
         </section>
     </main>
     <script src="awg-converter.js"></script>

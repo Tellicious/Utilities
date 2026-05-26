@@ -197,8 +197,10 @@ function showResult(sourceCanvas, result) {
     cam.meta.textContent = '';
     cam.bands.innerHTML = '';
     cam.render.innerHTML = '';
-    cam.hint.textContent = result.reason || 'Please retake the photo.';
-    cam.openPicker.style.visibility = 'hidden';
+    cam.hint.textContent = (result.reason || 'Please retake the photo.')
+      + ' You can also tap Edit to set the bands manually.';
+    // Always offer Edit — even on failure — so user can pick bands manually.
+    cam.openPicker.style.visibility = '';
     return;
   }
 
@@ -209,28 +211,36 @@ function showResult(sourceCanvas, result) {
   cam.render.innerHTML = window.ResistorEngine.renderResistorSVG(result.picks, result.mode);
 
   // Value + meta
-  cam.value.textContent = `${window.ResistorEngine.formatOhms(result.ohms)}  ± ${result.tol}%`;
-  const e = window.ResistorEngine.nearestStandard(result.ohms, result.tol);
-  let meta = '';
-  if (e && e.exact) meta = `${e.series} standard value ✓`;
-  else if (e) meta = `Nearest ${e.series}: ${window.ResistorEngine.formatOhms(e.standard)}`;
-  cam.meta.textContent = meta;
+  if (result.ohms != null && result.tol != null) {
+    cam.value.textContent = `${window.ResistorEngine.formatOhms(result.ohms)}  ± ${result.tol}%`;
+    const e = window.ResistorEngine.nearestStandard(result.ohms, result.tol);
+    let meta = '';
+    if (e && e.exact) meta = `${e.series} standard value ✓`;
+    else if (e) meta = `Nearest ${e.series}: ${window.ResistorEngine.formatOhms(e.standard)}`;
+    cam.meta.textContent = meta;
+  } else {
+    cam.value.textContent = '—';
+    cam.meta.textContent = "Couldn't compute a value from these bands — tap Edit to adjust.";
+  }
 
-  // Bands with per-band confidence
+  // Bands with per-band confidence.
+  // Confidence is 0..1; below 0.40 we mark as uncertain.
+  const LOW_CONF = 0.40;
   cam.bands.innerHTML = '';
   result.bands.forEach((b) => {
     const c = window.ResistorEngine.COLOR_BY_ID[b.colorId];
+    if (!c) return;
     const pill = document.createElement('span');
-    const isLow = b.confidence < 0.18;
+    const isLow = b.confidence < LOW_CONF;
     pill.className = 'camera__band' + (isLow ? ' camera__band--low' : '');
     pill.innerHTML = `<span class="camera__band-dot" style="background:${c.hex}"></span>${c.name}${isLow ? ' ?' : ''}`;
     cam.bands.appendChild(pill);
   });
 
   // Hint
-  const anyLow = result.bands.some(b => b.confidence < 0.18);
+  const anyLow = result.bands.some(b => b.confidence < LOW_CONF);
   cam.hint.textContent = anyLow
-    ? "Some bands looked uncertain — tap Edit to correct them."
+    ? "Some bands looked uncertain (marked with ?) — tap Edit to correct them."
     : "Tap Edit to fine-tune the result in the colour picker.";
 }
 
@@ -277,8 +287,15 @@ cam.retake.addEventListener('click', async () => {
 });
 
 cam.openPicker.addEventListener('click', () => {
-  if (!cam.lastDetection || !cam.lastDetection.success) return;
-  window.applyDetectedBands(cam.lastDetection.picks, cam.lastDetection.mode);
+  // On success: pre-fill picker with the detected bands
+  // On failure: just switch to the picker with current/default bands
+  if (cam.lastDetection && cam.lastDetection.success) {
+    window.applyDetectedBands(cam.lastDetection.picks, cam.lastDetection.mode);
+  } else {
+    // Switch to picker view without changing the bands
+    const pickerTab = document.querySelector('.tabbar__btn[data-view="picker"]');
+    if (pickerTab) pickerTab.click();
+  }
 });
 
 // Start/stop based on tab visibility

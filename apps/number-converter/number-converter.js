@@ -35,7 +35,7 @@
     if (!text) return { value: 0n, empty: true };
     if (!/^\d+$/.test(text)) return { error: 'Decimal accepts digits 0–9 only.' };
     const parsed = BigInt(text);
-    if (parsed > MAX_VALUE) return { error: 'Decimal value is larger than 64 bits.' };
+    if (parsed > MAX_VALUE) return { value: MAX_VALUE, clamped: true };
     return { value: parsed };
   }
 
@@ -43,9 +43,9 @@
     const text = normalizeHex(raw);
     if (!text) return { value: 0n, empty: true };
     if (!/^[0-9a-fA-F]+$/.test(text)) return { error: 'Hex accepts digits 0–9 and A–F only.' };
-    if (text.length > 16) return { error: 'Hex value is larger than 64 bits.' };
+    if (text.length > 16) return { value: MAX_VALUE, clamped: true };
     const parsed = BigInt(`0x${text}`);
-    if (parsed > MAX_VALUE) return { error: 'Hex value is larger than 64 bits.' };
+    if (parsed > MAX_VALUE) return { value: MAX_VALUE, clamped: true };
     return { value: parsed };
   }
 
@@ -74,8 +74,8 @@
   }
 
   function fitValueInputs() {
-    fitValueInput(decimalInput, 31, 22);
-    fitValueInput(hexInput, 31, 22);
+    fitValueInput(decimalInput, 32, 23);
+    fitValueInput(hexInput, 32, 23);
   }
 
   function renderBinary(num) {

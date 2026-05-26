@@ -81,7 +81,7 @@
 
   function fitFontForMax(input, sample, preferredPx, minimumPx) {
     const styles = window.getComputedStyle(input);
-    const available = input.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight) - 2;
+    const available = input.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
     let lo = minimumPx;
     let hi = preferredPx;
     for (let i = 0; i < 12; i += 1) {
@@ -95,8 +95,8 @@
   function fitValueInputs() {
     const decimalMax = formatDecimal(MAX_VALUE);
     const hexMax = formatHex(MAX_VALUE);
-    document.documentElement.style.setProperty('--decimal-font-size', `${fitFontForMax(decimalInput, decimalMax, 34, 20)}px`);
-    document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 34, 22)}px`);
+    document.documentElement.style.setProperty('--decimal-font-size', `${fitFontForMax(decimalInput, decimalMax, 35, 20)}px`);
+    document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 35, 22)}px`);
   }
 
   function renderBinary(num) {

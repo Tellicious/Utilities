@@ -72,15 +72,22 @@
   background: transparent;
   color: var(--ink);
   padding: 4px 14px 12px;
-  font: 650 36px/1.1 var(--font-sans);
+  font: 650 clamp(21px, 6.1vw, 32px)/1.1 var(--font-sans);
   text-align: right;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
+
+.value-input::-webkit-scrollbar { display: none; }
 
 .value-input--mono {
   font-family: var(--font-mono);
-  letter-spacing: 0.01em;
+  font-size: clamp(21px, 6vw, 31px);
+  letter-spacing: -0.045em;
 }
 
 .value-input::placeholder { color: var(--ink-3); }
@@ -151,7 +158,8 @@
 @media (max-width: 390px) {
   .number-shell { padding-left: calc(var(--safe-left) + 10px); padding-right: calc(var(--safe-right) + 10px); }
   .panel__label { font-size: 18px; }
-  .value-input { font-size: 32px; }
+  .value-input { font-size: clamp(21px, 5.9vw, 24px); }
+  .value-input--mono { font-size: clamp(21px, 5.8vw, 24px); }
   .bit-btn { height: 34px; font-size: 20px; border-radius: 4px; }
   .binary-row, .bit-labels { grid-template-columns: repeat(16, minmax(0, 1fr)); }
   .binary-row { gap: 2px; }

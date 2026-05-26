@@ -210,10 +210,10 @@ function showResult(sourceCanvas, result) {
 
   // Value + meta
   cam.value.textContent = `${window.ResistorEngine.formatOhms(result.ohms)}  ± ${result.tol}%`;
-  const e = window.ResistorEngine.nearestE24(result.ohms);
+  const e = window.ResistorEngine.nearestStandard(result.ohms, result.tol);
   let meta = '';
-  if (e && e.exact) meta = 'E24 standard value ✓';
-  else if (e) meta = `Nearest E24: ${window.ResistorEngine.formatOhms(e.standard)}`;
+  if (e && e.exact) meta = `${e.series} standard value ✓`;
+  else if (e) meta = `Nearest ${e.series}: ${window.ResistorEngine.formatOhms(e.standard)}`;
   cam.meta.textContent = meta;
 
   // Bands with per-band confidence

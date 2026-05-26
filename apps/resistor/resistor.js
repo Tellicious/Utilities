@@ -243,7 +243,6 @@ function renderResistorSVG(bandIds, mode) {
 
   // Body fill colour: beige for 4-band carbon-film, light-blue for 5-band metal-film.
   const bodyFill = mode === 5 ? '#aedaef' : '#d9bb7a';
-  const bodyStroke = mode === 5 ? '#4f7080' : '#565248';
 
   // Band positions (offsets from BODY_CX). Mirrors the original SVG's spacing
   // for 4-band: bands 1-3 evenly spaced, then a gap, then the tolerance band.
@@ -284,8 +283,8 @@ function renderResistorSVG(bandIds, mode) {
   // Lead bar (mid grey, full width)
   svg += `<rect y="345.7564" x="-200" height="48.487324" width="2500" fill="#808080"/>`;
 
-  // Body silhouette (same combined transform as the clipPath)
-  svg += `<path transform="translate(0,-1080)" d="${BODY_PATH}" fill="${bodyFill}" stroke="${bodyStroke}" stroke-width="2"/>`;
+  // Body silhouette (no border)
+  svg += `<path transform="translate(0,-1080)" d="${BODY_PATH}" fill="${bodyFill}"/>`;
 
   // Bands — drawn at absolute viewBox coords (no nested transforms).
   // Body silhouette occupies viewBox y ≈ 228..508 after transforms.

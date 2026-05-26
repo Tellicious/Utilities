@@ -117,7 +117,7 @@ button {
   flex-direction: column;
 }
 
-.hub__header { margin-bottom: 40px; }
+.hub__header { margin-bottom: 20px; }
 
 .hub__title {
   margin: 0;

@@ -26,9 +26,23 @@
     return num.toString(10).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
-  function formatHex(num) {
-    const hex = num.toString(16).toUpperCase().padStart(16, '0');
-    return hex.match(/.{1,2}/g).join('\u2009');
+  function groupHexFromRight(hex) {
+    const clean = hex.replace(/[^0-9A-F]/gi, '').toUpperCase();
+    if (!clean) return '0';
+    const firstGroupLength = clean.length % 2 || 2;
+    const groups = [clean.slice(0, firstGroupLength)];
+    for (let i = firstGroupLength; i < clean.length; i += 2) groups.push(clean.slice(i, i + 2));
+    return groups.filter(Boolean).join('\u2009');
+  }
+
+  function formatHex(num, { padded = false } = {}) {
+    const raw = num.toString(16).toUpperCase();
+    const hex = padded ? raw.padStart(16, '0') : raw;
+    return groupHexFromRight(hex);
+  }
+
+  function formatHexForInput(num) {
+    return formatHex(num, { padded: false });
   }
 
   function parseDecimal(raw) {
@@ -95,7 +109,7 @@
 
   function fitValueInputs() {
     const decimalMax = formatDecimal(MAX_VALUE);
-    const hexMax = formatHex(MAX_VALUE);
+    const hexMax = formatHex(MAX_VALUE, { padded: true });
     document.documentElement.style.setProperty('--decimal-font-size', `${fitFontForMax(decimalInput, decimalMax, 35, 20)}px`);
     document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 32, 22)}px`);
   }
@@ -104,10 +118,6 @@
 
   function byteHex(num) {
     return Array.from({ length: 8 }, (_, i) => Number((num >> BigInt((7 - i) * 8)) & 0xffn).toString(16).toUpperCase().padStart(2, '0'));
-  }
-
-  function asciiView(num) {
-    return byteHex(num).map(h => { const c = parseInt(h, 16); return c >= 32 && c <= 126 ? String.fromCharCode(c) : '·'; }).join('');
   }
 
   function endianSwap(num) {
@@ -119,9 +129,7 @@
     const items = [
       ['Unsigned', formatDecimal(num)],
       ['Signed', signed64(num).toString(10).replace(/\B(?=(\d{3})+(?!\d))/g, '.')],
-      ['Bytes', byteHex(num).join(' ')],
       ['Endian swap', endianSwap(num).replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, ' ')],
-      ['ASCII', asciiView(num)],
     ];
     inspectorGrid.innerHTML = items.map(([k, v]) => `<div class="inspect-row"><span>${k}</span><strong>${v}</strong></div>`).join('');
   }
@@ -141,7 +149,7 @@
   function render(source) {
     isRendering = true;
     if (source !== 'decimal') decimalInput.value = formatDecimal(value);
-    if (source !== 'hex') hexInput.value = formatHex(value);
+    if (source !== 'hex') hexInput.value = formatHexForInput(value);
     renderBinary(value);
     renderInspector(value);
     isRendering = false;
@@ -158,7 +166,7 @@
 
     if (!parsed.empty) {
       const input = source === 'decimal' ? decimalInput : hexInput;
-      input.value = source === 'decimal' ? formatDecimal(value) : formatHex(value);
+      input.value = source === 'decimal' ? formatDecimal(value) : formatHexForInput(value);
       input.setSelectionRange(input.value.length, input.value.length);
     }
   }
@@ -216,7 +224,7 @@
 
   hexInput.addEventListener('blur', () => {
     if (!hexInput.value.trim()) return;
-    hexInput.value = formatHex(value);
+    hexInput.value = formatHexForInput(value);
   });
 
   clearBtn.addEventListener('click', () => {

@@ -1,25 +1,25 @@
 /* =========================================================
    Utilities — global tokens + hub
-   Aesthetic: flat-minimal with warmth.
+   Aesthetic: iOS-native, cool blue accent, neutral system surfaces.
    Restrained palette, generous space, careful type rhythm.
    ========================================================= */
 
 :root {
   /* Surfaces */
-  --bg: #fafaf9;
+  --bg: #f2f2f7;
   --surface: #ffffff;
-  --surface-2: #f4f3f0;
-  --border: #e8e6e1;
-  --border-strong: #d6d3cc;
+  --surface-2: #f7f7fb;
+  --border: #d9d9de;
+  --border-strong: #c7c7cc;
 
   /* Ink */
   --ink: #1a1a1a;
   --ink-2: #5a5a58;
   --ink-3: #8a8985;
 
-  /* Accent — a single warm sienna, used sparingly */
-  --accent: #b25728;
-  --accent-soft: #f0d9c8;
+  /* Accent — iOS system blue, used sparingly */
+  --accent: #007aff;
+  --accent-soft: rgba(0, 122, 255, 0.14);
 
   /* Status */
   --good: #2f7a4a;
@@ -44,30 +44,30 @@
 }
 
 html[data-theme="dark"] {
-  --bg: #161513;
-  --surface: #1f1e1b;
-  --surface-2: #26241f;
-  --border: #2e2c27;
-  --border-strong: #3a3832;
-  --ink: #f1efea;
-  --ink-2: #b8b5ad;
-  --ink-3: #807d76;
-  --accent: #d97b48;
-  --accent-soft: #3a2418;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --border: #38383a;
+  --border-strong: #48484a;
+  --ink: #f2f2f7;
+  --ink-2: #c7c7cc;
+  --ink-3: #8e8e93;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.18);
 }
 
 @media (prefers-color-scheme: dark) {
   html[data-theme="auto"] {
-    --bg: #161513;
-    --surface: #1f1e1b;
-    --surface-2: #26241f;
-    --border: #2e2c27;
-    --border-strong: #3a3832;
-    --ink: #f1efea;
-    --ink-2: #b8b5ad;
-    --ink-3: #807d76;
-    --accent: #d97b48;
-    --accent-soft: #3a2418;
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --border: #38383a;
+    --border-strong: #48484a;
+    --ink: #f2f2f7;
+    --ink-2: #c7c7cc;
+    --ink-3: #8e8e93;
+    --accent: #0a84ff;
+    --accent-soft: rgba(10, 132, 255, 0.18);
   }
 }
 

@@ -9,7 +9,7 @@
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
       const dark = safe === 'dark' || (safe === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      meta.setAttribute('content', dark ? '#161513' : '#fafaf9');
+      meta.setAttribute('content', dark ? '#000000' : '#f2f2f7');
     }
   }
   window.UtilitiesSettings = {

@@ -63,15 +63,17 @@
 }
 
 .value-input {
-  flex: 1;
+  flex: 0 0 68px;
+  margin-top: auto;
   width: 100%;
   border: 0;
   outline: 0;
   resize: none;
   background: transparent;
   color: var(--ink);
-  padding: 4px 12px 14px;
-  font: 600 28px/1.25 var(--font-sans);
+  padding: 4px 14px 14px;
+  font: 650 34px/1.15 var(--font-sans);
+  text-align: right;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
@@ -117,6 +119,7 @@
   transition: transform 70ms ease, background 120ms ease, border-color 120ms ease;
 }
 
+.bit-btn--byte-gap { margin-right: 8px; }
 .bit-btn:active { transform: scale(0.92); }
 .bit-btn[data-value="1"] { background: var(--surface); border-color: var(--border-strong); }
 .bit-btn[data-value="0"] { color: var(--ink-3); }
@@ -132,6 +135,7 @@
 }
 
 .bit-label { min-height: 12px; }
+.bit-label--byte-gap { margin-right: 8px; }
 .bit-label--end { text-align: right; }
 
 .status {
@@ -148,8 +152,9 @@
 @media (max-width: 390px) {
   .number-shell { padding-left: calc(var(--safe-left) + 10px); padding-right: calc(var(--safe-right) + 10px); }
   .panel__label { font-size: 18px; }
-  .value-input { font-size: 24px; }
+  .value-input { font-size: 30px; }
   .bit-btn { height: 34px; font-size: 20px; border-radius: 4px; }
+  .bit-btn--byte-gap, .bit-label--byte-gap { margin-right: 5px; }
   .binary-row { gap: 2px; }
   .bit-labels { gap: 2px; }
 }

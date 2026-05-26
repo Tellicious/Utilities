@@ -13,8 +13,25 @@
   let value = 0n;
   let isRendering = false;
 
+  function normalizeDecimal(raw) {
+    return raw.trim().replace(/[._\s]/g, '');
+  }
+
+  function normalizeHex(raw) {
+    return raw.trim().replace(/^0x/i, '').replace(/[ _\s]/g, '');
+  }
+
+  function formatDecimal(num) {
+    return num.toString(10).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  function formatHex(num) {
+    const hex = num.toString(16).toUpperCase();
+    return hex.replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, ' ');
+  }
+
   function parseDecimal(raw) {
-    const text = raw.trim().replace(/_/g, '');
+    const text = normalizeDecimal(raw);
     if (!text) return { value: 0n, empty: true };
     if (!/^\d+$/.test(text)) return { error: 'Decimal accepts digits 0–9 only.' };
     const parsed = BigInt(text);
@@ -23,9 +40,7 @@
   }
 
   function parseHex(raw) {
-    let text = raw.trim().replace(/_/g, '');
-    if (!text) return { value: 0n, empty: true };
-    text = text.replace(/^0x/i, '');
+    const text = normalizeHex(raw);
     if (!text) return { value: 0n, empty: true };
     if (!/^[0-9a-fA-F]+$/.test(text)) return { error: 'Hex accepts digits 0–9 and A–F only.' };
     if (text.length > 16) return { error: 'Hex value is larger than 64 bits.' };
@@ -58,8 +73,8 @@
 
   function render(source) {
     isRendering = true;
-    if (source !== 'decimal') decimalInput.value = value.toString(10);
-    if (source !== 'hex') hexInput.value = value.toString(16).toUpperCase();
+    if (source !== 'decimal') decimalInput.value = formatDecimal(value);
+    if (source !== 'hex') hexInput.value = formatHex(value);
     renderBinary(value);
     isRendering = false;
   }
@@ -72,6 +87,12 @@
     value = parsed.value;
     setStatus(parsed.empty ? '' : '64-bit unsigned integer', false);
     render(source);
+
+    if (!parsed.empty) {
+      const input = source === 'decimal' ? decimalInput : hexInput;
+      input.value = source === 'decimal' ? formatDecimal(value) : formatHex(value);
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
   }
 
   function buildBinaryGrid() {
@@ -86,6 +107,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'bit-btn';
+        if (col === 7) button.classList.add('bit-btn--byte-gap');
         button.dataset.bit = String(bit);
         button.addEventListener('click', () => flipBit(bit));
         rowEl.appendChild(button);
@@ -96,6 +118,7 @@
       for (let col = 0; col < 16; col += 1) {
         const label = document.createElement('span');
         label.className = 'bit-label';
+        if (col === 7) label.classList.add('bit-label--byte-gap');
         if (col === 0) label.textContent = String(topBit);
         if (row === 3 && col === 15) {
           label.textContent = '0';
@@ -129,7 +152,7 @@
 
   hexInput.addEventListener('blur', () => {
     if (!hexInput.value.trim()) return;
-    hexInput.value = value.toString(16).toUpperCase();
+    hexInput.value = formatHex(value);
   });
 
   clearBtn.addEventListener('click', () => {

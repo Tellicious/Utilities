@@ -6,7 +6,7 @@
 // is only used when offline. This means users always get the latest
 // version when online — no need to reinstall the PWA to see updates.
 
-const VERSION = 'utilities-v2-network-first';
+const VERSION = 'utilities-v3-toolkit-expansion';
 
 // Minimal pre-cache: only what's needed to render *something* offline.
 // Everything else gets cached opportunistically as it's fetched.

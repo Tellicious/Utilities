@@ -11,11 +11,12 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <link rel="stylesheet" href="assets/styles.css">
   <title>Utilities</title>
+  <script src="assets/app.js"></script>
 </head>
 <body>
   <main class="hub" id="hub">
     <header class="hub__header">
-      <h1 class="hub__title">Utilities</h1>
+      <div class="hub__topline"><h1 class="hub__title">Utilities</h1><a class="hub__settings" href="apps/settings/index.html" aria-label="Settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 00.34 1.88l.05.05a2 2 0 01-2.83 2.83l-.05-.05A1.7 1.7 0 0015 19.4a1.7 1.7 0 00-1 1.55V21a2 2 0 01-4 0v-.07A1.7 1.7 0 009 19.4a1.7 1.7 0 00-1.88.34l-.05.05a2 2 0 01-2.83-2.83l.05-.05A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.55-1H3a2 2 0 010-4h.07A1.7 1.7 0 004.6 9a1.7 1.7 0 00-.34-1.88l-.05-.05a2 2 0 012.83-2.83l.05.05A1.7 1.7 0 009 4.6a1.7 1.7 0 001-1.55V3a2 2 0 014 0v.07A1.7 1.7 0 0015 4.6a1.7 1.7 0 001.88-.34l.05-.05a2 2 0 012.83 2.83l-.05.05A1.7 1.7 0 0019.4 9a1.7 1.7 0 001.55 1H21a2 2 0 010 4h-.07A1.7 1.7 0 0019.4 15z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a></div>
       <p class="hub__subtitle">A small set of everyday tools</p>
     </header>
 
@@ -56,17 +57,11 @@
         <span class="tile__chev" aria-hidden="true">→</span>
       </a>
 
-      <div class="tile tile--placeholder" aria-disabled="true">
-        <span class="tile__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </span>
-        <span class="tile__body">
-          <span class="tile__name">More soon</span>
-          <span class="tile__desc">Sub-apps will appear here</span>
-        </span>
-      </div>
+      <a class="tile" href="apps/smd-resistor/index.html"><span class="tile__icon" aria-hidden="true"><svg viewBox="0 0 48 48" width="36" height="36" fill="none"><rect x="8" y="17" width="32" height="14" rx="3" stroke="currentColor" stroke-width="2"/><path d="M14 22h7M14 27h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span class="tile__body"><span class="tile__name">SMD Resistor</span><span class="tile__desc">Decode 3/4 digit and EIA-96 markings</span></span><span class="tile__chev" aria-hidden="true">→</span></a>
+
+      <a class="tile" href="apps/capacitor/index.html"><span class="tile__icon" aria-hidden="true"><svg viewBox="0 0 48 48" width="36" height="36" fill="none"><path d="M16 10v28M32 10v28M6 24h10M32 24h10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 16h8M20 32h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span><span class="tile__body"><span class="tile__name">Capacitor</span><span class="tile__desc">Decode capacitor codes and units</span></span><span class="tile__chev" aria-hidden="true">→</span></a>
+
+      <a class="tile" href="apps/led-resistor/index.html"><span class="tile__icon" aria-hidden="true"><svg viewBox="0 0 48 48" width="36" height="36" fill="none"><path d="M10 24h9l10-8v16l-10-8M29 24h9" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M34 13l4-4M37 18l5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="tile__body"><span class="tile__name">LED Resistor</span><span class="tile__desc">Choose series resistor and power rating</span></span><span class="tile__chev" aria-hidden="true">→</span></a>
     </nav>
   </main>
 

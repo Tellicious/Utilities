@@ -8,6 +8,7 @@
   const hexInput = document.getElementById('hexInput');
   const binaryGrid = document.getElementById('binaryGrid');
   const statusText = document.getElementById('statusText');
+  const inspectorGrid = document.getElementById('inspectorGrid');
   const clearBtn = document.getElementById('clearBtn');
 
   let value = 0n;
@@ -99,6 +100,32 @@
     document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 35, 22)}px`);
   }
 
+  function signed64(num) { return num >= (1n << 63n) ? num - (1n << 64n) : num; }
+
+  function byteHex(num) {
+    return Array.from({ length: 8 }, (_, i) => Number((num >> BigInt((7 - i) * 8)) & 0xffn).toString(16).toUpperCase().padStart(2, '0'));
+  }
+
+  function asciiView(num) {
+    return byteHex(num).map(h => { const c = parseInt(h, 16); return c >= 32 && c <= 126 ? String.fromCharCode(c) : '·'; }).join('');
+  }
+
+  function endianSwap(num) {
+    return byteHex(num).reverse().join('');
+  }
+
+  function renderInspector(num) {
+    if (!inspectorGrid) return;
+    const items = [
+      ['Unsigned', formatDecimal(num)],
+      ['Signed', signed64(num).toString(10).replace(/\B(?=(\d{3})+(?!\d))/g, '.')],
+      ['Bytes', byteHex(num).join(' ')],
+      ['Endian swap', endianSwap(num).replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, ' ')],
+      ['ASCII', asciiView(num)],
+    ];
+    inspectorGrid.innerHTML = items.map(([k, v]) => `<div class="inspect-row"><span>${k}</span><strong>${v}</strong></div>`).join('');
+  }
+
   function renderBinary(num) {
     const bits = toBinary64(num);
     binaryGrid.querySelectorAll('.bit-btn').forEach((button) => {
@@ -116,6 +143,7 @@
     if (source !== 'decimal') decimalInput.value = formatDecimal(value);
     if (source !== 'hex') hexInput.value = formatHex(value);
     renderBinary(value);
+    renderInspector(value);
     isRendering = false;
   }
 
@@ -209,4 +237,5 @@
   buildBinaryGrid();
   fitValueInputs();
   renderBinary(value);
+  renderInspector(value);
 })();

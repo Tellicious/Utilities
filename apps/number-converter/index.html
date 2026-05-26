@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../../assets/styles.css">
   <link rel="stylesheet" href="number-converter.css">
   <title>Number Converter — Utilities</title>
+  <script src="../../assets/app.js"></script>
 </head>
 <body class="number-app">
   <header class="appbar" id="appbar">
@@ -46,6 +47,14 @@
         <span class="panel__hint">tap a bit to flip it</span>
       </div>
       <div class="binary-grid" id="binaryGrid" role="group" aria-label="64 binary bits"></div>
+    </section>
+
+    <section class="panel panel--inspector" aria-labelledby="inspectorLabel">
+      <div class="panel__head">
+        <h2 id="inspectorLabel" class="panel__label">Inspector</h2>
+        <span class="panel__hint">uint64 views</span>
+      </div>
+      <div class="inspector-grid" id="inspectorGrid"></div>
     </section>
 
     <p id="statusText" class="status" aria-live="polite"></p>

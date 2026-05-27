@@ -7,7 +7,7 @@
     const el = $('opSchematic'); if (!el) return;
     if (mode === 'inv') {
       el.innerHTML = `<svg viewBox="0 0 544 302" fill="none" aria-label="Inverting amplifier schematic">
-      <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <g stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="244,103 244,249 389,176" fill="none"/>
 
         <line x1="67" y1="164" x2="117" y2="164"/>
@@ -40,7 +40,7 @@
     </svg>`;
     } else {
       el.innerHTML = `<svg viewBox="-42.5 0 544 428" fill="none" aria-label="Non-inverting amplifier schematic">
-      <g stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <g stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="136,20 136,177 292,98" fill="none"/>
 
         <line x1="82" y1="52" x2="136" y2="52"/>

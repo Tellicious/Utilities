@@ -69,7 +69,7 @@
   resize: none;
   background: transparent;
   color: var(--ink);
-  padding: 30px 20px 12px 20px;
+  padding: 30px 20px 12px 5px;
 
   font-family: var(--font-mono);
   font-size: var(--decimal-font-size, 26px);
@@ -91,7 +91,7 @@
 
 .value-input--mono {
   font-family: var(--font-mono);
-  font-size: var(--hex-font-size, 31px);
+  font-size: var(--hex-font-size, 26px);
   letter-spacing: -0.025em;
 }
 

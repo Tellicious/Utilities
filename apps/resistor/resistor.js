@@ -162,17 +162,10 @@ function formatOhms(ohms) {
   else if (abs >= 1e3) { value = ohms / 1e3; unit = 'kΩ'; }
   else { value = ohms; unit = 'Ω'; }
 
-  function formatNumber(value, precision = 3) {
-    if (!isFinite(value)) return '—';
-    const text = Number(value.toPrecision(precision)).toString();
-    const [integer, fraction] = text.split('.');
-    const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    return fraction ? `${grouped},${fraction}` : grouped;
-  }
-
+  // Trim trailing zeros but keep up to 3 sig figs after decimal
   let str;
-  if (Number.isInteger(value)) str = formatNumber(value, 0);
-  else str = formatNumber(value, 3);
+  if (Number.isInteger(value)) str = String(value);
+  else str = parseFloat(value.toPrecision(3)).toString();
 
   return `${str} ${unit}`;
 }

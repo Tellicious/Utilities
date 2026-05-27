@@ -1,4 +1,4 @@
-/* Shared Utilities app helpers */
+/* Shared Electronics Toolkit app helpers */
 (function () {
   'use strict';
   const KEY = 'utilities.theme';

@@ -1,4 +1,4 @@
-// Service worker for Utilities PWA
+// Service worker for Electronics Toolkit PWA
 //
 // Strategy: NETWORK-FIRST with cache fallback.
 // On every page load, every request goes to the network first. If the

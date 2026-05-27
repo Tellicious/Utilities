@@ -1,6 +1,6 @@
 {
-  "name": "Utilities",
-  "short_name": "Utilities",
+  "name": "Electronics Toolkit",
+  "short_name": "Electronics Toolkit",
   "description": "A collection of small everyday tools",
   "start_url": "./index.html",
   "scope": "./",

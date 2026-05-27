@@ -1,4 +1,4 @@
-# Utilities
+# Electronics Toolkit
 
 A small offline PWA hub for everyday tools, designed for iOS install. First sub-app: **Resistor** — decode colour-band values manually or scan a real resistor with the camera.
 

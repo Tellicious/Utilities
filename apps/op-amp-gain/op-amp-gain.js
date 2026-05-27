@@ -2,7 +2,48 @@
   'use strict';
   let mode = 'non';
   const $ = id => document.getElementById(id);
-  function n(id) { return Number(String($(id).value).replace(',', '.')) }
+  function parseInputString(raw) {
+    if (raw == null) return NaN;
+    let s = String(raw).trim();
+    if (!s) return NaN;
+    s = s.replace(/\u2009|\u200A|\s/g, '');
+    const hasComma = s.indexOf(',') !== -1;
+    const hasDot = s.indexOf('.') !== -1;
+    if (hasComma && hasDot) {
+      s = s.replace(/\./g, '');
+      s = s.replace(',', '.');
+    } else if (hasComma) {
+      s = s.replace(',', '.');
+    } else {
+      const dots = (s.match(/\./g) || []).length;
+      if (dots > 1) {
+        const idx = s.lastIndexOf('.');
+        s = s.slice(0, idx).replace(/\./g, '') + s.slice(idx);
+      }
+    }
+    const n = Number(s);
+    return Number.isNaN(n) ? NaN : n;
+  }
+
+  function n(id) { return parseInputString($(id).value) }
+
+  function formatNumber(value, precision = 5) {
+    if (!isFinite(value)) return '—';
+    const text = Number(value.toPrecision(precision)).toString();
+    const [integer, fraction] = text.split('.');
+    const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return fraction ? `${grouped},${fraction}` : grouped;
+  }
+
+  function formatInput(el, precision = 5) {
+    const v = parseInputString(el.value);
+    if (Number.isNaN(v)) return;
+    el.value = formatNumber(v, precision);
+  }
+
+  function unformatInput(el) {
+    el.value = String(el.value).replace(/\u2009|\u200A|\s/g, '').replace(/\./g, '').replace(',', '.');
+  }
   function schematic() {
     const el = $('opSchematic'); if (!el) return;
     if (mode === 'inv') {
@@ -75,6 +116,12 @@
     }
   }
   function set(m) { mode = m; $('noninv').classList.toggle('seg__btn--active', m === 'non'); $('inv').classList.toggle('seg__btn--active', m === 'inv'); schematic(); render() }
-  function render() { const rin = n('rin'), rf = n('rf'), out = $('opValue'), meta = $('opMeta'); if (!(rin > 0 && rf >= 0)) { out.textContent = '—'; meta.textContent = 'Enter positive resistor values.'; return } const g = mode === 'non' ? 1 + rf / rin : -(rf / rin); out.textContent = `${Number(g.toPrecision(5))}×`; meta.textContent = mode === 'non' ? `Non-inverting: Av = 1 + Rf/Rin` : `Inverting: Av = -Rf/Rin` }
-  ['rin', 'rf'].forEach(id => $(id).addEventListener('input', render)); $('noninv').onclick = () => set('non'); $('inv').onclick = () => set('inv'); set('non');
+  function render() { const rin = n('rin'), rf = n('rf'), out = $('opValue'), meta = $('opMeta'); if (!(rin > 0 && rf >= 0)) { out.textContent = '—'; meta.textContent = 'Enter positive resistor values.'; return } const g = mode === 'non' ? 1 + rf / rin : -(rf / rin); out.textContent = `${formatNumber(g, 5)}×`; meta.textContent = mode === 'non' ? `Non-inverting: Av = 1 + Rf/Rin` : `Inverting: Av = -Rf/Rin` }
+  ['rin', 'rf'].forEach(id => {
+    const el = $(id);
+    el.addEventListener('input', render);
+    el.addEventListener('blur', () => formatInput(el));
+    el.addEventListener('focus', () => unformatInput(el));
+  });
+  $('noninv').onclick = () => set('non'); $('inv').onclick = () => set('inv'); set('non');
 })();

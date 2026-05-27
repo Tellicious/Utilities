@@ -109,8 +109,11 @@
   function fitValueInputs() {
     const decimalMax = formatDecimal(MAX_VALUE);
     const hexMax = formatHex(MAX_VALUE, { padded: true });
-    document.documentElement.style.setProperty('--decimal-font-size', `${fitFontForMax(decimalInput, decimalMax, 35, 20)}px`);
-    document.documentElement.style.setProperty('--hex-font-size', `${fitFontForMax(hexInput, hexMax, 32, 22)}px`);
+    const decimalSize = fitFontForMax(decimalInput, decimalMax, 32, 20);
+    const hexSize = fitFontForMax(hexInput, hexMax, 32, 20);
+    const sharedSize = Math.min(decimalSize, hexSize);
+    document.documentElement.style.setProperty('--decimal-font-size', `${sharedSize}px`);
+    document.documentElement.style.setProperty('--hex-font-size', `${sharedSize}px`);
   }
 
   function signed64(num) { return num >= (1n << 63n) ? num - (1n << 64n) : num; }

@@ -91,7 +91,7 @@
 
 .value-input--mono {
   font-family: var(--font-mono);
-  font-size: var(--hex-font-size, 26px);
+  font-size: var(--hex-font-size, 31px);
   letter-spacing: -0.025em;
 }
 

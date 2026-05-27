@@ -248,7 +248,7 @@ function showResult(sourceCanvas, result) {
   if (alternatives.length > 1) {
     cam.hint.textContent = anyLow
       ? "Some bands looked uncertain (marked with ?) and both reading directions are possible — tap Edit to correct them."
-      : "Both reading directions are shown because the last band is not gold/silver. Tap Edit to fine-tune the selected left-to-right result.";
+      : "Both reading directions are shown. Tap Edit to fine-tune the left-to-right result in the colour picker.";
   } else {
     cam.hint.textContent = anyLow
       ? "Some bands looked uncertain (marked with ?) — tap Edit to correct them."

@@ -2,14 +2,14 @@
    Resistor CV — band detection pipeline (vanilla JS)
    
    Pipeline stages:
-     1. Detect body via warm-tone + dark-pixel mask
-     2. Largest connected component → resistor body
-     3. PCA for principal axis → rotate to horizontal
-     4. Re-detect body in rotated frame
-     5. If still taller than wide, rotate another 90°
-     6. Sample top & bottom strips (skip central specular highlight)
-     7. MAD-thresholded band detection (columns far from body color)
-     8. Classify each band by nearest reference color (RGB Euclidean)
+     1. Find the resistor by scoring elongated rectangular components
+     2. PCA for principal axis → rotate to horizontal
+     3. Detect colour bands contained inside the resistor bounding box
+     4. Continue only when exactly 4 or 5 bands are recognized
+     5. Identify the first colour band
+     6. If the first band is silver/gold, rotate 180° and read again
+     7. Decode colours from left to right
+     8. If the last band is not gold/silver, also decode right to left
    
    Always returns a debug canvas showing what was analyzed.
    Per-band confidence allows the UI to highlight uncertain ones.
@@ -252,6 +252,103 @@ function largestComponent(mask, W, H) {
     cx: sumX / count,
     cy: sumY / count,
   };
+}
+
+
+/**
+ * Find the connected component that best matches the expected resistor body
+ * reference shape: an elongated rectangle. This deliberately scores shape,
+ * not just component area, so a large background patch is less likely to win.
+ *
+ * Returns the same structure as largestComponent().
+ */
+function bestRectangularComponent(mask, W, H) {
+  const labels = new Int32Array(mask.length);
+  const components = [];
+  let nextLabel = 1;
+  const stack = [];
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const p = y * W + x;
+      if (!mask[p] || labels[p]) continue;
+
+      labels[p] = nextLabel;
+      stack.length = 0;
+      stack.push(p);
+      let count = 0;
+      let minX = x, maxX = x, minY = y, maxY = y;
+      let sumX = 0, sumY = 0;
+
+      while (stack.length) {
+        const q = stack.pop();
+        const qx = q % W;
+        const qy = (q - qx) / W;
+        count++;
+        sumX += qx;
+        sumY += qy;
+        if (qx < minX) minX = qx;
+        if (qx > maxX) maxX = qx;
+        if (qy < minY) minY = qy;
+        if (qy > maxY) maxY = qy;
+
+        if (qx > 0) {
+          const n = q - 1;
+          if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); }
+        }
+        if (qx < W - 1) {
+          const n = q + 1;
+          if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); }
+        }
+        if (qy > 0) {
+          const n = q - W;
+          if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); }
+        }
+        if (qy < H - 1) {
+          const n = q + W;
+          if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); }
+        }
+      }
+
+      const bw = maxX - minX + 1;
+      const bh = maxY - minY + 1;
+      const longSide = Math.max(bw, bh);
+      const shortSide = Math.max(1, Math.min(bw, bh));
+      const aspect = longSide / shortSide;
+      const bboxArea = bw * bh;
+      const fill = count / bboxArea;
+      const areaFrac = count / (W * H);
+
+      // The resistor body should be a visible elongated rectangle/capsule.
+      // Scoring favours: enough area, 2:1+ aspect ratio, reasonable fill, and
+      // non-edge-dominated placement. It is intentionally tolerant of axial leads.
+      const aspectScore = Math.max(0, 1 - Math.abs(Math.log(aspect / 4.2)) / Math.log(4.2));
+      const fillScore = Math.max(0, 1 - Math.abs(fill - 0.48) / 0.48);
+      const areaScore = Math.min(1, areaFrac / 0.015);
+      const edgePenalty = (minX <= 1 || minY <= 1 || maxX >= W - 2 || maxY >= H - 2) ? 0.65 : 1;
+      const viable = count >= 180 && aspect >= 1.8 && aspect <= 18 && fill >= 0.10 && fill <= 0.96;
+      const score = viable ? (0.45 * aspectScore + 0.30 * fillScore + 0.25 * areaScore) * edgePenalty : 0;
+
+      components.push({
+        label: nextLabel,
+        score,
+        count,
+        bounds: { minX, maxX, minY, maxY },
+        cx: sumX / count,
+        cy: sumY / count,
+      });
+      nextLabel++;
+    }
+  }
+
+  const best = components.sort((a, b) => b.score - a.score)[0];
+  if (!best || best.score <= 0) return largestComponent(mask, W, H);
+
+  const outMask = new Uint8Array(mask.length);
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i] === best.label) outMask[i] = 1;
+  }
+  return { mask: outMask, count: best.count, bounds: best.bounds, cx: best.cx, cy: best.cy, shapeScore: best.score };
 }
 
 // =========================================================
@@ -511,49 +608,52 @@ function classifyBand(rgb, bodyRgb = null) {
 // READING DIRECTION + VALUE COMPUTATION
 // =========================================================
 
-/**
- * Decide which end has the tolerance band.
- * Heuristic: the band closest to a body edge AND a tolerance-capable color
- * is the tolerance band. If both ends are ambiguous, try both readings and
- * prefer one that gives a sensible value.
- */
-function pickReadingDirection(bands, mode) {
-  if (bands.length < mode) {
-    // Not enough bands — just return as-is
-    return {
-      picks: bands.map(b => b.id),
-      bandsWithConf: bands,
-      reason: 'Too few bands detected',
-    };
-  }
 
-  const truncated = bands.slice(0, mode);
-  const reversed = [...truncated].reverse();
+function isGoldOrSilver(colorId) {
+  return colorId === 'gold' || colorId === 'silver';
+}
 
-  const lastForward = truncated[truncated.length - 1];
-  const lastReverse = reversed[reversed.length - 1];
+function decodePicks(picks, mode) {
+  const computation = (window.ResistorEngine && window.ResistorEngine.computeOhmsFromPicks)
+    ? window.ResistorEngine.computeOhmsFromPicks(picks, mode)
+    : null;
+  if (!computation || computation.ohms == null || computation.tol == null) return null;
+  return { picks, mode, ohms: computation.ohms, tol: computation.tol };
+}
 
-  const forwardTolOk = TOL_COLORS.has(lastForward.id);
-  const reverseTolOk = TOL_COLORS.has(lastReverse.id);
-
-  let chosen, dir;
-  if (forwardTolOk && !reverseTolOk) {
-    chosen = truncated;
-    dir = 'forward';
-  } else if (reverseTolOk && !forwardTolOk) {
-    chosen = reversed;
-    dir = 'reverse';
-  } else {
-    // Both or neither — prefer forward
-    chosen = truncated;
-    dir = 'both candidates';
-  }
-
+function makeDecodedCandidate(bands, mode, directionLabel) {
+  const picks = bands.map(b => b.id);
+  const decoded = decodePicks(picks, mode);
+  if (!decoded) return null;
   return {
-    picks: chosen.map(b => b.id),
-    bandsWithConf: chosen,
-    reason: `Reading direction: ${dir}`,
+    ...decoded,
+    label: directionLabel,
+    bands: bands.map(b => ({
+      colorId: b.id,
+      confidence: b.confidence,
+      rgb: b.rgb,
+    })),
   };
+}
+
+/**
+ * Decode left-to-right. If the last band is not gold/silver, also decode the
+ * reverse order and return both candidates when valid.
+ */
+function decodeReadingsLeftToRight(bands, mode) {
+  const forwardBands = bands.slice(0, mode);
+  const candidates = [];
+
+  const forward = makeDecodedCandidate(forwardBands, mode, 'left-to-right');
+  if (forward) candidates.push(forward);
+
+  const last = forwardBands[forwardBands.length - 1];
+  if (last && !isGoldOrSilver(last.id)) {
+    const reverse = makeDecodedCandidate([...forwardBands].reverse(), mode, 'right-to-left');
+    if (reverse) candidates.push(reverse);
+  }
+
+  return candidates;
 }
 
 // =========================================================
@@ -612,124 +712,107 @@ function buildDebugCanvas(imgData, bodyMask, bbox, bands) {
  */
 async function detectResistor(imageData) {
   // 1) Downscale large images
-  const work = downscaleIfNeeded(imageData, 800);
+  const work = downscaleIfNeeded(imageData, 900);
   const W = work.width, H = work.height;
+  const bgRgb = [255, 255, 255];
 
-  // 2) Body mask + morphology + largest component
-  let mask = computeBodyMask(work);
-  mask = close(mask, W, H, 4);
-  mask = dilate(mask, W, H, 1);
-  const cc = largestComponent(mask, W, H);
+  function findBody(imgData) {
+    let mask = computeBodyMask(imgData);
+    mask = close(mask, imgData.width, imgData.height, 4);
+    mask = dilate(mask, imgData.width, imgData.height, 1);
+    return { mask, cc: bestRectangularComponent(mask, imgData.width, imgData.height) };
+  }
 
-  if (!cc || cc.count < 200) {
+  function rotateHorizontalFromComponent(imgData, cc) {
+    const angleRad = pcaAngle(cc.mask, imgData.width, imgData.height, cc.cx, cc.cy);
+    const angleDeg = angleRad * 180 / Math.PI;
+    let rotated = rotateImageData(imgData, angleDeg, bgRgb);
+    let body = findBody(rotated);
+    if (!body.cc) return { rotated, body };
+
+    const bw = body.cc.bounds.maxX - body.cc.bounds.minX + 1;
+    const bh = body.cc.bounds.maxY - body.cc.bounds.minY + 1;
+    if (bh > bw) {
+      rotated = rotateImageData(rotated, 90, bgRgb);
+      body = findBody(rotated);
+    }
+    return { rotated, body };
+  }
+
+  function detectBandsForFrame(imgData) {
+    const body = findBody(imgData);
+    if (!body.cc || body.cc.count < 200) return { body, bands: [] };
+    return { body, bands: findBands(imgData, body.cc.mask, body.cc.bounds) };
+  }
+
+  // 2) Find resistor by matching/scoring an elongated rectangular component.
+  const initial = findBody(work);
+  if (!initial.cc || initial.cc.count < 200) {
     return {
       success: false,
-      reason: "Couldn't find the resistor. Move closer and centre it in the frame.",
+      reason: "Couldn't find a resistor-shaped rectangle. Move closer, centre it, and use a plain background.",
       debugImage: imageDataToCanvas(work),
     };
   }
 
-  // 3) PCA for orientation
-  const angleRad = pcaAngle(cc.mask, W, H, cc.cx, cc.cy);
-  const angleDeg = angleRad * 180 / Math.PI;
-
-  // 4) Rotate (cv2/scipy rotate uses CCW positive, our canvas uses CW positive,
-  //    so use angleDeg directly since our coordinate is screen-y-down)
-  const bgRgb = [255, 255, 255];
-  let rotated = rotateImageData(work, angleDeg, bgRgb);
-
-  // 5) Re-find body in rotated frame
-  let mask2 = computeBodyMask(rotated);
-  mask2 = close(mask2, rotated.width, rotated.height, 4);
-  mask2 = dilate(mask2, rotated.width, rotated.height, 1);
-  let cc2 = largestComponent(mask2, rotated.width, rotated.height);
-
-  if (!cc2) {
+  // 3) Rotate so the main axis is horizontal, then detect bands within bbox.
+  let { rotated, body } = rotateHorizontalFromComponent(work, initial.cc);
+  if (!body.cc) {
     return {
       success: false,
-      reason: "Detection failed after rotation.",
+      reason: "Detection failed after horizontal alignment.",
       debugImage: imageDataToCanvas(rotated),
     };
   }
 
-  // 6) Orientation check: if taller than wide, rotate another 90°
-  const bw = cc2.bounds.maxX - cc2.bounds.minX + 1;
-  const bh = cc2.bounds.maxY - cc2.bounds.minY + 1;
-  if (bh > bw) {
-    rotated = rotateImageData(rotated, 90, bgRgb);
-    mask2 = computeBodyMask(rotated);
-    mask2 = close(mask2, rotated.width, rotated.height, 4);
-    mask2 = dilate(mask2, rotated.width, rotated.height, 1);
-    cc2 = largestComponent(mask2, rotated.width, rotated.height);
-    if (!cc2) {
-      return {
-        success: false,
-        reason: "Detection failed after re-rotation.",
-        debugImage: imageDataToCanvas(rotated),
-      };
-    }
+  let bands = findBands(rotated, body.cc.mask, body.cc.bounds);
+
+  // 4) If the first band is silver/gold, the resistor is backwards: rotate 180°
+  // and re-run bbox-contained band detection from left to right.
+  if (bands.length >= 1 && isGoldOrSilver(bands[0].id)) {
+    rotated = rotateImageData(rotated, 180, bgRgb);
+    const rerun = detectBandsForFrame(rotated);
+    body = rerun.body;
+    bands = rerun.bands;
   }
 
-  // 7) Detect bands
-  const bands = findBands(rotated, cc2.mask, cc2.bounds);
+  const debugImage = body.cc
+    ? buildDebugCanvas(rotated, body.cc.mask, body.cc.bounds, bands)
+    : imageDataToCanvas(rotated);
 
-  // 8) Always build debug visualization
-  const debugImage = buildDebugCanvas(rotated, cc2.mask, cc2.bounds, bands);
-
-  // 9) Validation
-  if (bands.length < 3) {
+  // 5) Continue only for exactly 4 or 5 recognized colour bands.
+  if (bands.length !== 4 && bands.length !== 5) {
     return {
       success: false,
-      reason: `Only ${bands.length} band${bands.length === 1 ? '' : 's'} detected. Try better lighting, closer framing, or a plain background.`,
-      debugImage,
-      bands,
-    };
-  }
-  if (bands.length > 6) {
-    return {
-      success: false,
-      reason: `Detected ${bands.length} bands — that's too many. There may be reflections or background clutter being mistaken for bands.`,
+      reason: `Detected ${bands.length} band${bands.length === 1 ? '' : 's'}. I need exactly 4 or 5 visible bands to decode the resistor.`,
       debugImage,
       bands,
     };
   }
 
-  // 10) Decide mode (4 or 5 bands)
-  // If we found exactly 5, it's a 5-band. If exactly 3 or 4, treat as 4-band.
-  // If 6, drop the last (temp coefficient) and treat as 5-band.
-  let mode;
-  let bandsToUse;
-  if (bands.length <= 4) {
-    mode = 4;
-    bandsToUse = bands.slice(0, 4);
-  } else if (bands.length === 5) {
-    mode = 5;
-    bandsToUse = bands.slice(0, 5);
-  } else {
-    mode = 5;
-    bandsToUse = bands.slice(0, 5);
+  const mode = bands.length;
+  const candidates = decodeReadingsLeftToRight(bands, mode);
+  if (!candidates.length) {
+    return {
+      success: false,
+      reason: "The bands were detected, but their colours do not form a valid 4- or 5-band resistor code.",
+      debugImage,
+      bands,
+    };
   }
 
-  // 11) Pick reading direction
-  const decision = pickReadingDirection(bandsToUse, mode);
-
-  // 12) Compute ohms/tolerance using the engine
-  const computation = (window.ResistorEngine && window.ResistorEngine.computeOhmsFromPicks)
-    ? window.ResistorEngine.computeOhmsFromPicks(decision.picks, mode)
-    : null;
-
+  const primary = candidates[0];
   return {
     success: true,
     mode,
-    picks: decision.picks,
-    bands: decision.bandsWithConf.map(b => ({
-      colorId: b.id,
-      confidence: b.confidence,
-      rgb: b.rgb,
-    })),
-    ohms: computation ? computation.ohms : null,
-    tol: computation ? computation.tol : null,
-    reasoning: decision.reason,
+    picks: primary.picks,
+    bands: primary.bands,
+    ohms: primary.ohms,
+    tol: primary.tol,
+    alternatives: candidates,
+    reasoning: candidates.length > 1
+      ? 'Last band is not gold/silver, so both left-to-right and right-to-left readings are shown.'
+      : 'Read left-to-right after orientation correction.',
     debugImage,
   };
 }

@@ -211,7 +211,13 @@ function showResult(sourceCanvas, result) {
   cam.render.innerHTML = window.ResistorEngine.renderResistorSVG(result.picks, result.mode);
 
   // Value + meta
-  if (result.ohms != null && result.tol != null) {
+  const alternatives = Array.isArray(result.alternatives) ? result.alternatives : [];
+  if (alternatives.length > 1) {
+    cam.value.textContent = alternatives
+      .map(a => `${a.label}: ${window.ResistorEngine.formatOhms(a.ohms)} ± ${a.tol}%`)
+      .join('  |  ');
+    cam.meta.textContent = 'Last band is not gold/silver, so both reading directions are possible.';
+  } else if (result.ohms != null && result.tol != null) {
     cam.value.textContent = `${window.ResistorEngine.formatOhms(result.ohms)}  ± ${result.tol}%`;
     const e = window.ResistorEngine.nearestStandard(result.ohms, result.tol);
     let meta = '';
@@ -239,9 +245,15 @@ function showResult(sourceCanvas, result) {
 
   // Hint
   const anyLow = result.bands.some(b => b.confidence < LOW_CONF);
-  cam.hint.textContent = anyLow
-    ? "Some bands looked uncertain (marked with ?) — tap Edit to correct them."
-    : "Tap Edit to fine-tune the result in the colour picker.";
+  if (alternatives.length > 1) {
+    cam.hint.textContent = anyLow
+      ? "Some bands looked uncertain (marked with ?) and both reading directions are possible — tap Edit to correct them."
+      : "Both reading directions are shown because the last band is not gold/silver. Tap Edit to fine-tune the selected left-to-right result.";
+  } else {
+    cam.hint.textContent = anyLow
+      ? "Some bands looked uncertain (marked with ?) — tap Edit to correct them."
+      : "Tap Edit to fine-tune the result in the colour picker.";
+  }
 }
 
 // ---------- Event wiring ----------

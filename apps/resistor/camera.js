@@ -210,13 +210,16 @@ function showResult(sourceCanvas, result) {
   // Render detected resistor
   cam.render.innerHTML = window.ResistorEngine.renderResistorSVG(result.picks, result.mode);
 
-  // Value + meta
-  const alternatives = Array.isArray(result.alternatives) ? result.alternatives : [];
-  if (alternatives.length > 1) {
-    cam.value.textContent = alternatives
-      .map(a => `${a.label}: ${window.ResistorEngine.formatOhms(a.ohms)} ± ${a.tol}%`)
-      .join('  |  ');
-    cam.meta.textContent = 'Last band is not gold/silver, so both reading directions are possible.';
+  // Value + meta. If the CV pipeline could not establish that the final
+  // band is gold/silver, it returns both left-to-right and right-to-left
+  // candidates as requested.
+  if (result.alternatives && result.alternatives.length === 2) {
+    const [a, b] = result.alternatives;
+    const fmt = (x) => (x && x.ohms != null && x.tol != null)
+      ? `${window.ResistorEngine.formatOhms(x.ohms)} ± ${x.tol}%`
+      : 'not decodable';
+    cam.value.innerHTML = `A: ${fmt(a)}<br>B: ${fmt(b)}`;
+    cam.meta.textContent = 'Ambiguous direction: last band is not gold/silver, so both readings are shown.';
   } else if (result.ohms != null && result.tol != null) {
     cam.value.textContent = `${window.ResistorEngine.formatOhms(result.ohms)}  ± ${result.tol}%`;
     const e = window.ResistorEngine.nearestStandard(result.ohms, result.tol);
@@ -239,21 +242,17 @@ function showResult(sourceCanvas, result) {
     const pill = document.createElement('span');
     const isLow = b.confidence < LOW_CONF;
     pill.className = 'camera__band' + (isLow ? ' camera__band--low' : '');
-    pill.innerHTML = `<span class="camera__band-dot" style="background:${c.hex}"></span>${c.name}${isLow ? ' ?' : ''}`;
+    const heightText = b.heightRatio ? ` ${Math.round(b.heightRatio * 100)}%h` : '';
+    pill.innerHTML = `<span class="camera__band-dot" style="background:${c.hex}"></span>${c.name}${heightText}${isLow ? ' ?' : ''}`;
     cam.bands.appendChild(pill);
   });
 
   // Hint
   const anyLow = result.bands.some(b => b.confidence < LOW_CONF);
-  if (alternatives.length > 1) {
-    cam.hint.textContent = anyLow
-      ? "Some bands looked uncertain (marked with ?) and both reading directions are possible — tap Edit to correct them."
-      : "Both reading directions are shown. Tap Edit to fine-tune the left-to-right result in the colour picker.";
-  } else {
-    cam.hint.textContent = anyLow
-      ? "Some bands looked uncertain (marked with ?) — tap Edit to correct them."
-      : "Tap Edit to fine-tune the result in the colour picker.";
-  }
+  const baseHint = result.reasoning || 'Tap Edit to fine-tune the result in the colour picker.';
+  cam.hint.textContent = anyLow
+    ? `${baseHint} Some bands looked uncertain (marked with ?).`
+    : `${baseHint} Green box = detected resistor; red boxes = valid bands, each >=75% of box height.`;
 }
 
 // ---------- Event wiring ----------

@@ -8,7 +8,6 @@
   const hexInput = document.getElementById('hexInput');
   const binaryGrid = document.getElementById('binaryGrid');
   const statusText = document.getElementById('statusText');
-  const inspectorGrid = document.getElementById('inspectorGrid');
   const clearBtn = document.getElementById('clearBtn');
 
   let value = 0n;
@@ -124,15 +123,6 @@
     return byteHex(num).reverse().join('');
   }
 
-  function renderInspector(num) {
-    if (!inspectorGrid) return;
-    const items = [
-      ['Unsigned', formatDecimal(num)],
-      ['Signed', signed64(num).toString(10).replace(/\B(?=(\d{3})+(?!\d))/g, '.')],
-      ['Endian swap', endianSwap(num).replace(/\B(?=(?:[0-9A-F]{2})+(?![0-9A-F]))/g, ' ')],
-    ];
-    inspectorGrid.innerHTML = items.map(([k, v]) => `<div class="inspect-row"><span>${k}</span><strong>${v}</strong></div>`).join('');
-  }
 
   function renderBinary(num) {
     const bits = toBinary64(num);
@@ -151,7 +141,6 @@
     if (source !== 'decimal') decimalInput.value = formatDecimal(value);
     if (source !== 'hex') hexInput.value = formatHexForInput(value);
     renderBinary(value);
-    renderInspector(value);
     isRendering = false;
   }
 
@@ -245,5 +234,4 @@
   buildBinaryGrid();
   fitValueInputs();
   renderBinary(value);
-  renderInspector(value);
 })();

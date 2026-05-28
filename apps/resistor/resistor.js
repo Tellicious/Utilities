@@ -229,81 +229,45 @@ function nearestE24(ohms) {
  *   - place coloured bands at known x positions inside the body
  */
 function renderResistorSVG(bandIds, mode) {
+  const S = window.Utilities.Shapes;
+
   // Body silhouette path, verbatim from resistor.svg. Do not modify.
   const BODY_PATH = "m 798.5625,1308.5625 c -21.47944,0 -37.32619,4.0094 -49.46875,10.5625 -0.0526,0.028 -0.10377,0.065 -0.15625,0.094 -18.04664,8.9915 -27.35769,22.7119 -33.90625,37.4374 -14.51122,27.7533 -22.11341,59.0945 -55.8125,69.0938 -1.31397,0.3899 -2.62206,0.7469 -3.9375,1.125 l 0,46.2188 c 1.31639,0.3788 2.62251,0.766 3.9375,1.1562 64.74738,19.2121 12.93753,117.1875 139.34375,117.1875 0.73556,0 1.52761,-0.033 2.3125,-0.062 1.42733,0.029 2.86724,0.062 4.34375,0.062 30.2139,0 103.1066,-25.625 131.1875,-25.625 l 185.24995,0 c 28.081,0 100.9736,25.625 131.1876,25.625 1.4764,0 2.9164,-0.034 4.3437,-0.062 0.7849,0.03 1.5769,0.062 2.3125,0.062 126.4062,0 74.5964,-97.9754 139.3438,-117.1875 1.3149,-0.3902 2.6211,-0.7774 3.9374,-1.1562 l 0,-46.2188 c -1.3154,-0.3781 -2.6235,-0.7351 -3.9374,-1.125 -33.6993,-9.9993 -41.3013,-41.3405 -55.8126,-69.0938 -6.5485,-14.7255 -15.8596,-28.4459 -33.9062,-37.4374 -0.053,-0.029 -0.1037,-0.065 -0.1562,-0.094 -12.1426,-6.5531 -27.9894,-10.5625 -49.4688,-10.5625 -0.7233,0 -1.4833,0.034 -2.25,0.062 -1.4474,-0.029 -2.9088,-0.062 -4.4062,-0.062 -30.214,0 -103.1066,25.625 -131.1876,25.625 l -185.24995,0 c -28.0809,0 -100.9736,-25.625 -131.1875,-25.625 -1.49753,0 -2.95885,0.034 -4.40625,0.062 -0.76674,-0.029 -1.52669,-0.062 -2.25,-0.062 z";
 
-  // Geometry in the SVG's native coordinate system (from resistor.svg).
-  // After the transforms, body occupies viewBox y ≈ 228..508 (height 280).
-  // BAND_Y / BAND_H must span this range so the clip-path can crop bands
-  // to the body silhouette and produce full-height bands across the body.
   const BODY_CX = 1027.5;
   const BAND_W = 68;
-  const BAND_Y = 220;    // start a bit above body top
-  const BAND_H = 296;    // extend a bit past body bottom (covers y=220..516)
-
-  // Body fill colour: beige for 4-band carbon-film, light-blue for 5-band metal-film.
+  const BAND_Y = 220;
+  const BAND_H = 296;
   const bodyFill = mode === 5 ? '#aedaef' : '#d9bb7a';
-
-  // Band positions (offsets from BODY_CX). Mirrors the original SVG's spacing
-  // for 4-band: bands 1-3 evenly spaced, then a gap, then the tolerance band.
-  // For 5-band: 4 evenly spaced, then a gap, then the tolerance band.
   const nBands = mode === 5 ? 5 : 4;
-  let centers;
-  if (nBands === 4) {
-    // 4-band: bands at offsets -208.5, -93.5, +18.5, then +234.5 (tolerance)
-    centers = [-208.5, -93.5, 18.5, 234.5];
-  } else {
-    // 5-band: 4 digit/multiplier bands evenly spaced + tolerance offset
-    centers = [-208.5, -113.5, -18.5, 76.5, 234.5];
-  }
+  const centers = nBands === 4 ? [-208.5, -93.5, 18.5, 234.5] : [-208.5, -113.5, -18.5, 76.5, 234.5];
+  const viewBox = '452.5 200 1150 330';
 
-  // Lead bar (from original SVG): y=318.11612 to y=366.6, full width
-  // We extend it to a wider viewBox so leads protrude on both sides.
+  const clip = S.el('defs', {}, S.el('clipPath', { id: 'bodyClip', 'clipPathUnits': 'userSpaceOnUse' },
+    S.path(BODY_PATH, { transform: 'translate(0,-1080)' })
+  ));
 
-  // ---- ViewBox: tight crop centered around the body ----
-  // Body center x is 1027.5, so viewBox x must be centered there:
-  //   VB_X + VB_W/2 = 1027.5  →  VB_X = 1027.5 - VB_W/2
-  // VB_W = 1150, so VB_X = 1027.5 - 575 = 452.5
-  const VB_X = 452.5;
-  const VB_Y = 200;
-  const VB_W = 1150;
-  const VB_H = 330;
+  const lead = S.rect(-200, 345.7564, 2500, 48.487324, { fill: '#808080' });
+  const body = S.path(BODY_PATH, { transform: 'translate(0,-1080)', fill: bodyFill });
+  const bands = [];
 
-  // Bands clip path: full body silhouette so bands match exactly.
-  // Use a single combined transform on the clipping path so renderers don't
-  // get confused by nested <g> transforms inside clipPath elements.
-  let svg = `<svg viewBox="${VB_X} ${VB_Y} ${VB_W} ${VB_H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Resistor with bands">`;
-  svg += `<defs>`;
-  svg += `<clipPath id="bodyClip" clipPathUnits="userSpaceOnUse">`;
-  // Combined transform: translate(0,27.6403) then translate(0,-1107.6403) = translate(0,-1080)
-  svg += `<path transform="translate(0,-1080)" d="${BODY_PATH}"/>`;
-  svg += `</clipPath>`;
-  svg += `</defs>`;
-
-  // Lead bar (mid grey, full width)
-  svg += `<rect y="345.7564" x="-200" height="48.487324" width="2500" fill="#808080"/>`;
-
-  // Body silhouette (no border)
-  svg += `<path transform="translate(0,-1080)" d="${BODY_PATH}" fill="${bodyFill}"/>`;
-
-  // Bands — drawn at absolute viewBox coords (no nested transforms).
-  // Body silhouette occupies viewBox y ≈ 228..508 after transforms.
-  // Bands need to extend that full range to be clipped properly.
-  svg += `<g clip-path="url(#bodyClip)">`;
   for (let i = 0; i < nBands; i++) {
     const id = bandIds[i];
     if (!id) continue;
     const c = COLOR_BY_ID[id];
     if (!c) continue;
-    const cx = BODY_CX + centers[i];
-    const bx = cx - BAND_W / 2;
-    const strokeAttr = (id === 'white') ? ' stroke="#cccccc" stroke-width="1"' : '';
-    svg += `<rect x="${bx}" y="${BAND_Y}" width="${BAND_W}" height="${BAND_H}" fill="${c.hex}"${strokeAttr}/>`;
+    const bx = BODY_CX + centers[i] - BAND_W / 2;
+    const attrs = { x: bx, y: BAND_Y, width: BAND_W, height: BAND_H, fill: c.hex };
+    if (id === 'white') Object.assign(attrs, { stroke: '#cccccc', 'stroke-width': 1 });
+    bands.push(S.el('rect', attrs));
   }
-  svg += `</g>`;
 
-  svg += `</svg>`;
-  return svg;
+  return S.svg(viewBox, [
+    clip,
+    lead,
+    body,
+    S.el('g', { 'clip-path': 'url(#bodyClip)' }, bands.join('')),
+  ], { role: 'img', 'aria-label': 'Resistor with bands' });
 }
 
 // -------------------- DOM ELEMENTS --------------------
@@ -455,13 +419,7 @@ els.modeBtns.forEach(btn => {
  */
 
 function normalizeLocalizedNumber(raw) {
-  let s = String(raw).trim().replace(/\u2009|\u200A|\s/g, '');
-  const hasComma = s.indexOf(',') !== -1;
-  const hasDot = s.indexOf('.') !== -1;
-  if (hasComma && hasDot) return s.replace(/\./g, '').replace(',', '.');
-  if (hasComma) return s.replace(',', '.');
-  if (/^\d{1,3}(\.\d{3})+$/.test(s)) return s.replace(/\./g, '');
-  return s;
+  return U.normalizeNumber(raw);
 }
 function parseResistance(input) {
   if (!input) return null;

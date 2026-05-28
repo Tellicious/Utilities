@@ -453,6 +453,16 @@ els.modeBtns.forEach(btn => {
  * Parse strings like:
  *   "4.7k", "4k7", "470", "1M", "2.2 MΩ", "10R", "100"
  */
+
+function normalizeLocalizedNumber(raw) {
+  let s = String(raw).trim().replace(/\u2009|\u200A|\s/g, '');
+  const hasComma = s.indexOf(',') !== -1;
+  const hasDot = s.indexOf('.') !== -1;
+  if (hasComma && hasDot) return s.replace(/\./g, '').replace(',', '.');
+  if (hasComma) return s.replace(',', '.');
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) return s.replace(/\./g, '');
+  return s;
+}
 function parseResistance(input) {
   if (!input) return null;
   let s = input.trim().toLowerCase().replace(/\s+/g, '').replace(/ω/g, '').replace(/ohms?/g, '');
@@ -466,10 +476,10 @@ function parseResistance(input) {
   }
 
   // Handle "4.7k" / "470" / "1m"
-  const m = s.match(/^(\d*\.?\d+)([rkmg])?$/);
+  const m = s.match(/^(\d*(?:[.,]?\d+))(?:([rkmg]))?$/);
   if (m) {
     const [, num, suffix] = m;
-    return scaleBySuffix(parseFloat(num), suffix);
+    return scaleBySuffix(Number(normalizeLocalizedNumber(num)), suffix);
   }
 
   return null;

@@ -6,24 +6,28 @@
     if (raw == null) return NaN;
     let s = String(raw).trim();
     if (!s) return NaN;
+    // formatNumber() uses European separators: dot for thousands,
+    // comma for decimals. Parse that same convention back in so a
+    // formatted value like "1.000" is read as 1000, not 1.
     s = s.replace(/\u2009|\u200A|\s/g, '');
     const hasComma = s.indexOf(',') !== -1;
     const hasDot = s.indexOf('.') !== -1;
     if (hasComma && hasDot) {
-      s = s.replace(/\./g, '');
-      s = s.replace(',', '.');
+        s = s.replace(/\./g, '').replace(',', '.');
     } else if (hasComma) {
-      s = s.replace(',', '.');
-    } else {
-      const dots = (s.match(/\./g) || []).length;
-      if (dots > 1) {
-        const idx = s.lastIndexOf('.');
-        s = s.slice(0, idx).replace(/\./g, '') + s.slice(idx);
-      }
+        s = s.replace(',', '.');
+    } else if (hasDot) {
+        const isGroupedThousands = /^\d{1,3}(\.\d{3})+$/.test(s);
+        const dots = (s.match(/\./g) || []).length;
+        if (isGroupedThousands) s = s.replace(/\./g, '');
+        else if (dots > 1) {
+            const idx = s.lastIndexOf('.');
+            s = s.slice(0, idx).replace(/\./g, '') + s.slice(idx);
+        }
     }
     const n = Number(s);
     return Number.isNaN(n) ? NaN : n;
-  }
+}
 
   function n(id) { return parseInputString($(id).value) }
 

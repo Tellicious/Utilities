@@ -15,7 +15,7 @@
 //    update) transparently re-caches everything from scratch and the old
 //    cache is dropped on activate.
 
-const VERSION = 'utilities-v7-full-precache';
+const VERSION = 'utilities-v8-no-camera';
 
 // Complete list of everything the app needs to run fully offline.
 // Keep this in sync when adding/removing files (it's the single source of
@@ -54,8 +54,6 @@ const PRECACHE_ASSETS = [
   './apps/number-converter/number-converter.js',
   './apps/op-amp-gain/op-amp-gain.js',
   './apps/resistor/resistor.js',
-  './apps/resistor/cv.js',
-  './apps/resistor/camera.js',
   './apps/series-parallel/series-parallel.js',
   './apps/smd-resistor/smd-resistor.js',
   './apps/voltage-divider/voltage-divider.js',

@@ -547,49 +547,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !els.sheet.hidden) closeLookup();
 });
 
-// -------------------- VIEW SWITCHING (tab bar) --------------------
-
-const tabBtns = document.querySelectorAll('.tabbar__btn');
-const views = {
-  picker: document.getElementById('view-picker'),
-  camera: document.getElementById('view-camera'),
-};
-
-function switchView(name) {
-  Object.entries(views).forEach(([k, el]) => el.dataset.active = (k === name) ? 'true' : 'false');
-  tabBtns.forEach(b => {
-    const on = b.dataset.view === name;
-    b.classList.toggle('tabbar__btn--active', on);
-    b.setAttribute('aria-selected', on ? 'true' : 'false');
-  });
-
-  // Hide picker-only controls (Bands toggle + Lookup icon) when on camera tab.
-  const showPickerControls = (name === 'picker');
-  document.querySelectorAll('.appbar__cluster .picker-only').forEach(el => {
-    el.hidden = !showPickerControls;
-  });
-
-  // Notify camera module
-  if (name === 'camera') window.dispatchEvent(new CustomEvent('camera:enter'));
-  else window.dispatchEvent(new CustomEvent('camera:leave'));
-}
-
-tabBtns.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
-
-// Expose to camera module: apply detected bands and switch to picker
-window.applyDetectedBands = function (picks, mode) {
-  state.mode = mode;
-  els.modeBtns.forEach(x => {
-    const active = Number(x.dataset.bands) === mode;
-    x.classList.toggle('seg__btn--active', active);
-    x.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-  setCurrentPicks(picks);
-  renderAll();
-  switchView('picker');
-};
-
-// Expose helpers for camera module
+// Expose the engine (value/SVG helpers) for potential reuse.
 window.ResistorEngine = {
   COLORS,
   COLOR_BY_ID,

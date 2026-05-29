@@ -454,30 +454,29 @@ function smoothColors(rgbs, win = 3) {
 }
 
 /**
- * Separation score between a column colour and the body substrate. Combines
- * raw RGB distance with a chroma/value term, so strongly coloured bands
- * (green, blue, red) separate cleanly while darker/metallic bands still count.
+ * Band signal that is invariant to brightness/shading: a chromatic difference
+ * (hue + saturation) from the GLOBAL body colour. Hue/saturation barely change
+ * with lighting, so no per-column baseline is needed and there is no
+ * edge-extrapolation artifact. The tan/gold body and lighting gradients produce
+ * ~0 here, so they never look like colour bands; black/gray bands register via
+ * the large saturation difference from a saturated body.
  */
-function bandSeparation(rgb, substrate) {
-  const base = rgbDistance(rgb, substrate);
-  const [, s1, v1] = rgbToHsv(rgb[0], rgb[1], rgb[2]);
-  const [, s2, v2] = rgbToHsv(substrate[0], substrate[1], substrate[2]);
-  const chroma = Math.abs(s1 - s2) * 120 + Math.abs(v1 - v2) * 60;
-  return Math.max(base, base * 0.6 + chroma * 0.7);
+function chromaDarkDev(rgb, ref) {
+  const [h, s] = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+  const [rh, rs] = rgbToHsv(ref[0], ref[1], ref[2]);
+  const satGate = Math.min(1, s / 0.22);
+  const hueTerm = hueDistance(h, rh) * 140 * satGate;
+  // Saturation difference also captures black/gray bands (very desaturated vs a
+  // saturated body) without a value term, which would be fragile to shading.
+  const satTerm = Math.abs(s - rs) * 110;
+  return hueTerm + satTerm;
 }
 
-/**
- * Detect bands as runs of columns whose colour departs from the body
- * substrate. Strong (clearly coloured) bands are found with a robust
- * threshold. A low-contrast gold/silver tolerance band — which on a tan
- * carbon-film body barely differs from the substrate — is then rescued, but
- * only at the body ENDS and outside the strong-band span, so mid-body
- * highlights are never mistaken for a band.
- * Returns { bands (sorted left-to-right), substrate }.
- */
 function findBands(imgData, body) {
   const w = body.maxX - body.minX + 1;
-  const trim = Math.floor(w * 0.03);
+  // Light end trim: chromatic detection does not false-fire on shoulders, so a
+  // small trim suffices and avoids clipping a digit band that sits near an end.
+  const trim = Math.floor(w * 0.04);
   const trimmedBody = { ...body, minX: body.minX + trim, maxX: body.maxX - trim };
 
   const profile = columnColorProfile(imgData, trimmedBody);
@@ -487,34 +486,37 @@ function findBands(imgData, body) {
   const smooth = smoothColors(profile.rgbs, 5);
   const substrate = medianRgb(smooth);
 
-  const seps = smooth.map(c => bandSeparation(c, substrate));
-  const medS = median(seps);
-  const madS = median(seps.map(d => Math.abs(d - medS)));
-  // Strong threshold: clearly above gold/highlight level, below colour bands.
-  const strongThreshold = Math.max(34, medS + 2.2 * madS);
+  // Band signal vs the global body colour (shading-invariant). No per-column
+  // baseline, so there is no edge-extrapolation artifact when bands cluster at
+  // one end (the normal digits-grouped layout).
+  const dev = smooth.map(c => chromaDarkDev(c, substrate));
 
-  const minBandW = Math.max(2, Math.floor(nCols * 0.015));
-  const maxBandW = Math.max(minBandW + 2, Math.floor(nCols * 0.30));
+  // Noise floor from the lower portion of the signal (body columns). Use a low
+  // percentile so wide/numerous bands don't pull it onto band columns.
+  const sortedDev = [...dev].sort((a, b) => a - b);
+  const noiseMed = sortedDev[Math.floor(dev.length * 0.1)] || 0;
+  const lowHalf = dev.filter(d => d <= (sortedDev[Math.floor(dev.length * 0.5)] || 0));
+  const noiseMad = Math.max(1.5, median(lowHalf.map(d => Math.abs(d - noiseMed))));
+  const threshold = Math.max(16, noiseMed + 2.5 * noiseMad);
+
+  const minBandW = Math.max(2, Math.floor(nCols * 0.02));
+  const maxBandW = Math.max(minBandW + 2, Math.floor(nCols * 0.32));
   const maxGap = Math.max(1, Math.floor(nCols * 0.02));
 
-  // ---- helper: turn a column predicate into merged runs ----
-  function runsWhere(pred) {
+  function mergedRuns(pred) {
     const raw = [];
     let i = 0;
-    while (i < seps.length) {
-      if (pred(i)) {
-        const start = i;
-        while (i < seps.length && pred(i)) i++;
-        raw.push([start, i]);
-      } else i++;
+    while (i < dev.length) {
+      if (pred(i)) { const s = i; while (i < dev.length && pred(i)) i++; raw.push([s, i]); }
+      else i++;
     }
-    const merged = [];
+    const out = [];
     for (const r of raw) {
-      const prev = merged[merged.length - 1];
+      const prev = out[out.length - 1];
       if (prev && r[0] - prev[1] <= maxGap) prev[1] = r[1];
-      else merged.push([r[0], r[1]]);
+      else out.push([r[0], r[1]]);
     }
-    return merged;
+    return out;
   }
 
   function bandFromRun(start, end) {
@@ -527,48 +529,51 @@ function findBands(imgData, body) {
       ci_start: start, ci_end: end,
       x_start: profile.xs[start],
       x_end: profile.xs[Math.min(profile.xs.length - 1, end - 1)],
-      y_start: body.minY,
-      y_end: body.maxY,
+      y_start: body.minY, y_end: body.maxY,
       rgb: bandRgb,
-      separation: median(seps.slice(start, end)),
+      separation: median(dev.slice(start, end)),
       ...classifyBand(bandRgb, substrate),
     };
   }
 
-  // ---- strong colour bands ----
-  const strong = [];
-  for (const [s, e] of runsWhere(i => seps[i] > strongThreshold)) {
+  // Colour/dark bands (the reliable ones). Gold/silver and shading do not
+  // normally appear on a tan body; on a light body a genuine gold/silver band
+  // can be detected — keep those separately as a trustworthy tolerance cue.
+  const detected = [];
+  for (const [s, e] of mergedRuns(i => dev[i] > threshold)) {
     const wc = e - s;
     if (wc < minBandW || wc > maxBandW) continue;
-    strong.push(bandFromRun(s, e));
+    const band = bandFromRun(s, e);
+    // Reject a narrow, low-confidence blip touching the extreme edge — typically
+    // shading in the empty tolerance gap, not a real band.
+    const touchesEnd = (s <= 0) || (e >= dev.length - 1);
+    if (touchesEnd && wc < 2 * minBandW && band.confidence < 0.62) continue;
+    detected.push(band);
+  }
+  detected.sort((a, b) => a.x_start - b.x_start);
+  const colored = detected.filter(b => b.id !== 'gold' && b.id !== 'silver');
+  const metals = detected.filter(b => b.id === 'gold' || b.id === 'silver');
+
+  // Tolerance % hint: inspect the body colour just beyond the colour bands at
+  // each end and decide gold (±5%) vs silver (±10%). Used only for the
+  // displayed tolerance, never for the value or direction.
+  function endMetal(zs, ze) {
+    if (ze - zs < 2) return null;
+    const reg = smooth.slice(Math.max(0, zs), Math.min(smooth.length, ze));
+    if (reg.length < 2) return null;
+    const col = medianRgb(reg);
+    const [, s, v] = rgbToHsv(col[0], col[1], col[2]);
+    if (s < 0.18 && v > 0.45) return 'silver';
+    return 'gold';
+  }
+  let tolHint = { left: null, right: null };
+  if (colored.length) {
+    const m = Math.max(2, Math.floor(nCols * 0.02));
+    tolHint.left = endMetal(0, colored[0].ci_start - m);
+    tolHint.right = endMetal(colored[colored.length - 1].ci_end + m, nCols);
   }
 
-  // ---- end-zone gold/silver rescue ----
-  // Only search the body ends, outside the span covered by strong bands, so a
-  // mid-body specular highlight can never be mistaken for a tolerance band.
-  const rescued = [];
-  if (strong.length) {
-    const spanMin = strong[0].ci_start;
-    const spanMax = strong[strong.length - 1].ci_end;
-    const margin = Math.max(2, Math.floor(nCols * 0.03));
-    const goldThreshold = Math.max(26, strongThreshold * 0.5);
-    const endZones = [
-      [0, spanMin - margin],
-      [spanMax + margin, seps.length],
-    ];
-    for (const [zs, ze] of endZones) {
-      if (ze - zs < minBandW) continue;
-      for (const [s, e] of runsWhere(i => i >= zs && i < ze && seps[i] > goldThreshold)) {
-        const wc = e - s;
-        if (wc < minBandW || wc > maxBandW) continue;
-        const cand = bandFromRun(s, e);
-        if (cand.id === 'gold' || cand.id === 'silver') rescued.push(cand);
-      }
-    }
-  }
-
-  const bands = strong.concat(rescued).sort((a, b) => a.x_start - b.x_start);
-  return { bands, substrate };
+  return { colored, metals, nCols, substrate, tolHint, allBands: detected };
 }
 
 // =========================================================
@@ -707,12 +712,109 @@ function analyzeHorizontalImage(rotated, bgRgb, note = '') {
     if (cc2) {
       const body2 = isolateBody(cc2.mask, rot.width, rot.height) || cc2.bounds;
       const r = findBands(rot, body2);
-      return { success: true, rotated: rot, body: body2, bands: r.bands, debugImage: buildDebugCanvas(rot, body2, r.bands, note) };
+      return { success: true, rotated: rot, body: body2, detect: r, debugImage: buildDebugCanvas(rot, body2, r.allBands, note) };
     }
   }
 
   const r = findBands(rotated, body);
-  return { success: true, rotated, body, bands: r.bands, debugImage: buildDebugCanvas(rotated, body, r.bands, note) };
+  return { success: true, rotated, body, detect: r, debugImage: buildDebugCanvas(rotated, body, r.allBands, note) };
+}
+
+/**
+ * Assemble a reading from the detected colour bands. Gold/silver tolerance
+ * bands are intentionally NOT detected as colour bands (they are unreliable on
+ * tan bodies); instead the reading direction comes from gap structure — the
+ * colour bands cluster toward the digits end, leaving the larger gap on the
+ * tolerance end. The resistance depends only on the colour bands, so this is
+ * robust even when the tolerance band is invisible. Returns a result or null.
+ */
+function assembleReading(detect) {
+  const { colored, metals, nCols, tolHint } = detect;
+  const c = colored.length;
+  if (c < 3 || c > 5) return null;
+
+  // Gaps from the outermost colour bands to the body ends.
+  const leftGap = colored[0].ci_start;
+  const rightGap = (nCols - 1) - colored[c - 1].ci_end;
+
+  // A genuinely-detected gold/silver band (e.g. on a light body) is the most
+  // reliable tolerance cue: use the metal band that sits beyond the colour
+  // bands to fix the side directly.
+  let metalSide = null, metalId = null;
+  if (metals && metals.length) {
+    const m = metals[0].ci_start < colored[0].ci_start ? metals[0]
+      : metals[metals.length - 1].ci_end > colored[c - 1].ci_end ? metals[metals.length - 1] : null;
+    if (m) { metalSide = m.ci_start < colored[0].ci_start ? 'left' : 'right'; metalId = m.id; }
+  }
+
+  // Internal band pitch (median spacing between adjacent colour bands).
+  const centers = colored.map(b => (b.ci_start + b.ci_end) / 2);
+  const pitches = [];
+  for (let i = 1; i < centers.length; i++) pitches.push(centers[i] - centers[i - 1]);
+  const pitch = pitches.length ? median(pitches) : nCols;
+
+  // Is there a hidden (gold/silver) tolerance band? It would sit at the end
+  // with a gap clearly larger than the band pitch.
+  const hiddenLeft = leftGap > pitch * 0.9;
+  const hiddenRight = rightGap > pitch * 0.9;
+
+  let mode, appendTol, tolSide, ambiguous = false;
+  if (c === 3) {
+    // 4-band: 3 colour bands + a (usually gold/silver) tolerance.
+    mode = 4; appendTol = true;
+    tolSide = metalSide || (rightGap >= leftGap ? 'right' : 'left');
+    ambiguous = !metalSide && Math.max(leftGap, rightGap) / Math.max(1, Math.min(leftGap, rightGap)) < 1.25;
+  } else if (c === 5) {
+    mode = 5; appendTol = false;
+    tolSide = metalSide || (rightGap >= leftGap ? 'right' : 'left');
+  } else { // c === 4: 4-band (colour tolerance) OR 5-band (hidden/visible tolerance)
+    if (metalSide) {
+      mode = 5; appendTol = true; tolSide = metalSide;
+    } else if (hiddenRight !== hiddenLeft) {
+      mode = 5; appendTol = true; tolSide = hiddenRight ? 'right' : 'left';
+    } else {
+      mode = 4; appendTol = false;
+      tolSide = rightGap >= leftGap ? 'right' : 'left';
+    }
+  }
+
+  // Colour bands ordered digits-first: from the end opposite the tolerance.
+  const ordered = (tolSide === 'right') ? colored.slice() : colored.slice().reverse();
+  const picks = ordered.map(b => b.id);
+  let tolId = null;
+  if (appendTol) {
+    tolId = metalId || (tolSide === 'right' ? tolHint.right : tolHint.left) || 'gold';
+    picks.push(tolId);
+  }
+
+  const cand = formatCandidate(picks, mode);
+  if (!cand || cand.ohms == null) {
+    // Fallback: try the other direction.
+    const rev = formatCandidate(ordered.slice().reverse().map(b => b.id).concat(appendTol ? [tolId] : []), mode);
+    if (rev && rev.ohms != null) return finalize(rev, ordered.slice().reverse(), appendTol, tolId, 'right', false, []);
+    return null;
+  }
+
+  let alternatives = [];
+  if (ambiguous) {
+    const rev = formatCandidate(picks.slice().reverse(), mode);
+    if (rev && rev.ohms != null) alternatives = [cand, rev];
+  }
+  const reasoning = appendTol
+    ? `${c} colour bands detected; tolerance band is faint, inferred on the ${tolSide} from band spacing (assumed ${tolId === 'silver' ? '±10% silver' : '±5% gold'}).`
+    : `${c} bands detected; tolerance band on the ${tolSide}.`;
+
+  return finalize(cand, ordered, appendTol, tolId, tolSide, false, alternatives, reasoning);
+
+  function finalize(candX, orderedX, appendTolX, tolIdX, tolSideX, amb, alts, reason) {
+    const bandsOut = orderedX.map(b => ({ colorId: b.id, confidence: b.confidence, rgb: b.rgb }));
+    if (appendTolX) bandsOut.push({ colorId: tolIdX || 'gold', confidence: 0.3, rgb: tolIdX === 'silver' ? [180, 183, 187] : [200, 160, 90] });
+    return {
+      success: true, mode: candX.mode, picks: candX.picks, bands: bandsOut,
+      ohms: candX.ohms, tol: candX.tol, alternatives: alts,
+      reasoning: reason || `Tolerance on the ${tolSideX}.`,
+    };
+  }
 }
 
 async function detectResistor(imageData) {
@@ -742,50 +844,22 @@ async function detectResistor(imageData) {
   let pass = analyzeHorizontalImage(rotated, bg, 'straightened');
   if (!pass.success) return pass;
 
-  if (pass.bands.length >= 4 && ['gold', 'silver'].includes(pass.bands[0].id)) {
-    rotated = rotateImageData(pass.rotated, 180, bg);
-    pass = analyzeHorizontalImage(rotated, bg, 'flipped 180deg (tolerance band was first)');
-    if (!pass.success) return pass;
-  }
-
-  const bands = pass.bands;
+  const detect = pass.detect;
   const debugImage = pass.debugImage;
+  const nColored = detect.colored.length;
 
-  if (bands.length !== 4 && bands.length !== 5) {
+  const result = assembleReading(detect);
+  if (!result) {
     return {
       success: false,
-      reason: `Detected ${bands.length} band${bands.length === 1 ? '' : 's'}. Need exactly 4 or 5. Try a sharper photo, a plainer background, and make sure all bands are visible.`,
+      reason: `Detected ${nColored} clear colour band${nColored === 1 ? '' : 's'}. Need 3–5. Try a sharper, evenly-lit photo of the resistor on a plain, contrasting background, filling the guide box.`,
       debugImage,
-      bands: bands.map(b => ({ colorId: b.id, confidence: b.confidence, rgb: b.rgb })),
+      bands: detect.allBands.map(b => ({ colorId: b.id, confidence: b.confidence, rgb: b.rgb })),
     };
   }
 
-  const mode = bands.length;
-  const forwardBands = bands.slice(0, mode);
-  const forwardPicks = forwardBands.map(b => b.id);
-  const forward = formatCandidate(forwardPicks, mode);
-
-  const last = forwardBands[forwardBands.length - 1];
-  let alternatives = [];
-  let reasoning = 'Read left-to-right; the tolerance band is on the right.';
-
-  if (!['gold', 'silver'].includes(last.id)) {
-    const reverse = formatCandidate([...forwardBands].reverse().map(b => b.id), mode);
-    alternatives = [forward, reverse];
-    reasoning = 'No clear gold/silver tolerance band, so both reading directions are shown.';
-  }
-
-  return {
-    success: true,
-    mode,
-    picks: forward.picks,
-    bands: forwardBands.map(b => ({ colorId: b.id, confidence: b.confidence, rgb: b.rgb })),
-    ohms: forward.ohms,
-    tol: forward.tol,
-    alternatives,
-    reasoning,
-    debugImage,
-  };
+  result.debugImage = debugImage;
+  return result;
 }
 
 // Public API

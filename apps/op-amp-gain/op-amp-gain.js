@@ -7,9 +7,6 @@
   const $ = id => document.getElementById(id);
   const n = id => U.parseNumber($(id).value);
 
-  function formatInput(el, precision = 5) { U.formatInput(el, precision); }
-  function unformatInput(el) { U.unformatInput(el); }
-
   function label(x, y, main, sub) {
     return S.text(x, y, `${main}${S.tspan(sub, { x: x + 19, y: y + 8, 'font-size': 16 })}`);
   }
@@ -109,12 +106,7 @@
     meta.textContent = mode === 'non' ? 'Non-inverting: Av = 1 + Rf/Rin' : 'Inverting: Av = -Rf/Rin';
   }
 
-  ['rin', 'rf'].forEach(id => {
-    const el = $(id);
-    el.addEventListener('input', render);
-    el.addEventListener('blur', () => formatInput(el));
-    el.addEventListener('focus', () => unformatInput(el));
-  });
+  U.wireInputs(['rin', 'rf'], render, { precision: 5 });
   $('noninv').onclick = () => set('non');
   $('inv').onclick = () => set('inv');
   set('non');

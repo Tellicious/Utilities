@@ -1,30 +1,90 @@
 // Service worker for Electronics Toolkit PWA
 //
-// Strategy: NETWORK-FIRST with cache fallback.
-// On every page load, every request goes to the network first. If the
-// network responds, we serve that (and refresh the cache copy). The cache
-// is only used when offline. This means users always get the latest
-// version when online — no need to reinstall the PWA to see updates.
+// Strategy: FULL PRECACHE + NETWORK-FIRST at runtime.
+//
+//  • On install, EVERY asset in the app (all pages, scripts, styles and
+//    icons — not just the shell) is fetched fresh and stored in the cache
+//    keyed by VERSION. This means the whole app works offline immediately
+//    after the first visit, regardless of which sub-apps have ever been
+//    opened.
+//  • At runtime every request still goes to the network first and the
+//    cache copy is refreshed on success, so online users always get the
+//    latest deployed code. The cache is the fallback when offline.
+//  • Because each VERSION gets its own cache and the install step always
+//    re-fetches the full manifest, bumping VERSION (i.e. deploying an
+//    update) transparently re-caches everything from scratch and the old
+//    cache is dropped on activate.
 
-const VERSION = 'utilities-v6-ui-units-polish';
+const VERSION = 'utilities-v7-full-precache';
 
-// Minimal pre-cache: only what's needed to render *something* offline.
-// Everything else gets cached opportunistically as it's fetched.
+// Complete list of everything the app needs to run fully offline.
+// Keep this in sync when adding/removing files (it's the single source of
+// truth for what gets pre-cached). Paths are relative to the SW scope (root).
 const PRECACHE_ASSETS = [
+  // App shell
   './',
   './index.html',
   './manifest.json',
+
+  // Shared assets
+  './assets/styles.css',
+  './assets/app.js',
+  './assets/icons/icon-192.png',
+  './assets/icons/icon-512.png',
+  './assets/icons/icon-maskable-512.png',
+
+  // Sub-apps — pages
+  './apps/awg-converter/index.html',
+  './apps/battery-life/index.html',
+  './apps/capacitor/index.html',
+  './apps/led-resistor/index.html',
+  './apps/number-converter/index.html',
+  './apps/op-amp-gain/index.html',
+  './apps/resistor/index.html',
+  './apps/series-parallel/index.html',
+  './apps/settings/index.html',
+  './apps/smd-resistor/index.html',
+  './apps/voltage-divider/index.html',
+
+  // Sub-apps — scripts
+  './apps/awg-converter/awg-converter.js',
+  './apps/battery-life/battery-life.js',
+  './apps/capacitor/capacitor.js',
+  './apps/led-resistor/led-resistor.js',
+  './apps/number-converter/number-converter.js',
+  './apps/op-amp-gain/op-amp-gain.js',
+  './apps/resistor/resistor.js',
+  './apps/resistor/cv.js',
+  './apps/resistor/camera.js',
+  './apps/series-parallel/series-parallel.js',
+  './apps/smd-resistor/smd-resistor.js',
+  './apps/voltage-divider/voltage-divider.js',
+
+  // Sub-apps — styles
+  './apps/number-converter/number-converter.css',
+  './apps/resistor/resistor.css',
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION).then((cache) =>
+      // Fetch every asset bypassing the HTTP cache so a freshly-deployed
+      // version is genuinely re-cached, then store it. Individual failures
+      // are tolerated (allSettled) so one missing/renamed file can't block
+      // the whole install.
       Promise.allSettled(
-        PRECACHE_ASSETS.map((url) =>
-          cache.add(url).catch((err) => {
+        PRECACHE_ASSETS.map(async (url) => {
+          try {
+            const res = await fetch(url, { cache: 'no-store' });
+            if (res && (res.ok || res.type === 'opaque')) {
+              await cache.put(url, res.clone());
+            } else {
+              throw new Error('bad status ' + (res && res.status));
+            }
+          } catch (err) {
             console.warn('[SW] precache skip', url, err.message);
-          })
-        )
+          }
+        })
       )
     ).then(() => self.skipWaiting())
   );

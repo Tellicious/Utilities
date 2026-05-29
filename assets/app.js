@@ -225,6 +225,62 @@
     if (selectedValue != null) select.value = String(selectedValue);
   }
 
+  // --- DOM helpers shared by the sub-apps ---------------------------------
+
+  // Resolve a target to an element. Accepts an id string or an element.
+  function byId(target) {
+    return typeof target === 'string' ? document.getElementById(target) : target;
+  }
+
+  // Parse the numeric value currently typed into an input (by id or element).
+  function readNumber(target) {
+    const el = byId(target);
+    return el ? parseNumber(el.value) : NaN;
+  }
+
+  // Resolve a list of targets to elements. Accepts an array of ids/elements,
+  // a single element, a NodeList/array, or a CSS selector string.
+  function resolveElements(targets) {
+    if (targets == null) return [];
+    if (typeof targets === 'string') return Array.from(document.querySelectorAll(targets));
+    if (typeof targets.length === 'number' && typeof targets !== 'function') {
+      return Array.from(targets, byId).filter(Boolean);
+    }
+    return [byId(targets)].filter(Boolean);
+  }
+
+  // Wire up the standard input lifecycle shared across every calculator:
+  //   • input  → run the supplied handler (recompute the result)
+  //   • blur   → reformat the field with grouping/precision
+  //   • focus  → strip formatting back to a raw, editable number
+  //
+  // `targets` may be an array of ids, a NodeList, an element, or a selector.
+  // `opts.precision` is either a number or a function (el) => number, applied
+  // per-field on blur. `opts.fixed` selects fixed-decimal formatting
+  // (toFixed) instead of the default significant-figure formatting. The
+  // handler is invoked with the element that changed.
+  function wireInputs(targets, handler, opts = {}) {
+    const precisionOpt = opts.precision;
+    const useFixed = !!opts.fixed;
+    const elements = resolveElements(targets);
+    elements.forEach((el) => {
+      el.addEventListener('input', () => { if (handler) handler(el); });
+      el.addEventListener('blur', () => {
+        if (!el.value) return;
+        const raw = typeof precisionOpt === 'function' ? precisionOpt(el) : precisionOpt;
+        const precision = raw == null ? 4 : raw;
+        if (useFixed) {
+          const value = parseNumber(el.value);
+          if (!Number.isNaN(value)) el.value = formatFixedNumber(value, precision);
+        } else {
+          formatInput(el, precision);
+        }
+      });
+      el.addEventListener('focus', () => unformatInput(el));
+    });
+    return elements;
+  }
+
   window.Utilities = Object.assign(window.Utilities || {}, {
     parseNumber,
     normalizeNumber,
@@ -238,6 +294,9 @@
     setHTML,
     setSVG,
     fillSelect,
+    byId,
+    readNumber,
+    wireInputs,
     svgAttrs,
     svgEl,
     svg,
@@ -251,4 +310,65 @@
   };
   applyTheme(localStorage.getItem(KEY) || 'auto');
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(localStorage.getItem(KEY) || 'auto'));
+
+  // --- Service worker registration (shared by every page) -----------------
+  //
+  // This used to be a ~30-line block copy-pasted into the hub and the
+  // resistor page (and missing from every other sub-app). It now lives here
+  // once, so it runs on *every* page that loads app.js and there's a single
+  // place to change the update behaviour.
+  //
+  // The SW lives at the site root (sw.js) with root scope, but app.js is
+  // loaded from pages at different depths (./assets/app.js from the root,
+  // ../../assets/app.js from a sub-app). We derive the root from this
+  // script's own resolved URL — it always ends in `assets/app.js` — so the
+  // registration works regardless of which page we're on.
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+
+    const script = document.currentScript;
+    const src = script && script.src;
+    // Strip the trailing "assets/app.js" to get the site root URL.
+    const root = src ? src.replace(/assets\/app\.js(?:\?.*)?$/, '') : './';
+    const swUrl = root + 'sw.js';
+
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register(swUrl, {
+          scope: root,
+          // Bypass the HTTP cache for the SW file itself, so updates to
+          // sw.js are detected on every load.
+          updateViaCache: 'none',
+        });
+
+        // Check for an updated SW right now.
+        reg.update().catch(() => { });
+
+        // When a new SW takes control, reload once to get fresh assets.
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (reloaded) return;
+          reloaded = true;
+          window.location.reload();
+        });
+
+        // If a new SW is waiting/installed, tell it to activate immediately.
+        function promoteWaiting(worker) {
+          if (worker && worker.state === 'installed' && navigator.serviceWorker.controller) {
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }
+        if (reg.waiting) promoteWaiting(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => promoteWaiting(installing));
+        });
+      } catch (e) {
+        // SW registration failed (probably http:// or file://) — that's fine,
+        // the app still works without offline support.
+      }
+    });
+  }
+  registerServiceWorker();
 })();

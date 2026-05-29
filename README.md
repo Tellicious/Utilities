@@ -25,10 +25,10 @@ Push to `main` and the workflow at `.github/workflows/deploy.yml` deploys automa
 ```
 ├── index.html                 # Hub
 ├── manifest.json              # PWA manifest
-├── sw.js                      # Service worker (cache-first)
+├── sw.js                      # Service worker (full precache + network-first)
 ├── assets/
 │   ├── styles.css             # Global tokens + hub styles
-│   ├── app.js                 # (Reserved for shared utility code)
+│   ├── app.js                 # Shared helpers, settings + service-worker registration
 │   └── icons/                 # PWA + Apple-touch icons
 └── apps/
     └── resistor/

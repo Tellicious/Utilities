@@ -1,18 +1,26 @@
 /* =========================================================
    Resistor CV — band detection pipeline (vanilla JS)
-   
+
+   Rewritten for robustness on real photos with a plain background.
+
    Pipeline stages:
-     1. Detect body via warm-tone + dark-pixel mask
-     2. Largest connected component → resistor body
-     3. PCA for principal axis → rotate to horizontal
-     4. Re-detect body in rotated frame
-     5. If still taller than wide, rotate another 90°
-     6. Sample top & bottom strips (skip central specular highlight)
-     7. MAD-thresholded band detection (columns far from body color)
-     8. Classify each band by nearest reference color (RGB Euclidean)
-   
-   Always returns a debug canvas showing what was analyzed.
-   Per-band confidence allows the UI to highlight uncertain ones.
+     1. Estimate the background colour from a border ring of the image.
+     2. Foreground = pixels that differ enough from the background. This
+        captures the body AND every band (any hue) AND the leads — unlike
+        a warm-tone-only mask, which dropped green/blue bands entirely.
+     3. Largest connected component (8-connected, after a light dilation so
+        thin diagonal leads stay attached) -> the resistor silhouette.
+     4. PCA on that silhouette -> principal axis -> rotate to horizontal.
+     5. Re-mask in the rotated frame, then separate the thick body from the
+        thin leads using a per-column thickness profile.
+     6. Build a per-column colour profile across the whole body (median over
+        the central rows, so a specular highlight can't dominate).
+     7. Segment bands as runs of columns whose colour differs from the body
+        substrate colour; classify each against the 12 reference colours.
+     8. Resolve reading direction (tolerance band heuristic) and decode.
+
+   Always returns a debug canvas showing what was analysed.
+   Per-band confidence lets the UI flag uncertain bands.
    ========================================================= */
 
 // -------- Color helpers --------
@@ -37,24 +45,19 @@ function rgbToHsv(r, g, b) {
 // Reference band colors (12 standard). Tuned for real photographs:
 // these are typical RGB values for printed bands under normal lighting.
 const BAND_REFS = [
-  { id: 'black', rgb: [30, 30, 30] },
-  { id: 'brown', rgb: [110, 70, 35] },
-  { id: 'red', rgb: [200, 40, 30] },
-  { id: 'orange', rgb: [235, 110, 30] },
-  { id: 'yellow', rgb: [245, 215, 60] },
-  { id: 'green', rgb: [60, 150, 80] },
-  { id: 'blue', rgb: [50, 100, 200] },
-  { id: 'violet', rgb: [170, 80, 180] },
+  { id: 'black', rgb: [35, 35, 35] },
+  { id: 'brown', rgb: [110, 70, 40] },
+  { id: 'red', rgb: [175, 55, 45] },
+  { id: 'orange', rgb: [220, 105, 40] },
+  { id: 'yellow', rgb: [225, 195, 70] },
+  { id: 'green', rgb: [60, 135, 90] },
+  { id: 'blue', rgb: [55, 95, 175] },
+  { id: 'violet', rgb: [150, 85, 170] },
   { id: 'gray', rgb: [140, 140, 140] },
-  { id: 'white', rgb: [240, 240, 240] },
-  { id: 'gold', rgb: [200, 145, 70] },
-  { id: 'silver', rgb: [180, 180, 185] },
+  { id: 'white', rgb: [235, 235, 235] },
+  { id: 'gold', rgb: [195, 150, 80] },
+  { id: 'silver', rgb: [175, 178, 182] },
 ];
-
-// Tolerance-capable colors (band 4 of a 4-band, band 5 of a 5-band).
-const TOL_COLORS = new Set([
-  'brown', 'red', 'green', 'blue', 'violet', 'gray', 'gold', 'silver',
-]);
 
 // =========================================================
 // IMAGE HELPERS
@@ -110,30 +113,107 @@ function rotateImageData(imgData, angleDeg, bgRgb) {
 }
 
 // =========================================================
-// BODY MASK
+// SMALL STATS HELPERS
+// =========================================================
+
+function rgbDistance(a, b) {
+  const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function median(arr) {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const n = sorted.length;
+  return n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[(n - 1) / 2];
+}
+
+function medianRgb(rgbs) {
+  return [0, 1, 2].map(ch => median(rgbs.map(rgb => rgb[ch])));
+}
+
+// =========================================================
+// BACKGROUND + FOREGROUND MASK
 // =========================================================
 
 /**
- * Detect resistor body: warm-tone saturated pixels OR very dark pixels (bands).
- * Returns Uint8Array of length W*H with 1 where body, 0 elsewhere.
+ * Estimate the background colour from a ring of border pixels. Photos taken
+ * for this tool have a plain background, so the outer frame is dominated by it.
  */
-function computeBodyMask(imgData) {
+function estimateBackground(imgData) {
   const { data, width: W, height: H } = imgData;
-  const mask = new Uint8Array(W * H);
-  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const [h, s, v] = rgbToHsv(r, g, b);
-    const warm = ((h < 70) || (h > 320)) && s > 0.08 && v > 0.20 && v < 0.97;
-    const dark = v < 0.25;
-    if (warm || dark) mask[p] = 1;
+  const band = Math.max(2, Math.floor(Math.min(W, H) * 0.05));
+  const rs = [], gs = [], bs = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (x < band || x >= W - band || y < band || y >= H - band) {
+        if (((x + y) & 3) === 0) {
+          const i = (y * W + x) * 4;
+          rs.push(data[i]); gs.push(data[i + 1]); bs.push(data[i + 2]);
+        }
+      }
+    }
   }
-  return mask;
+  return [median(rs), median(gs), median(bs)];
 }
 
 /**
- * Binary morphology: dilate the mask by 1 pixel using a 4-connected kernel.
+ * Otsu threshold on a value list (range 0..maxVal). Returns the split point.
  */
-function dilate(mask, W, H, iterations = 1) {
+function otsuThreshold(values, maxVal) {
+  const bins = 256;
+  const hist = new Float64Array(bins);
+  const scale = (bins - 1) / Math.max(1, maxVal);
+  for (const v of values) hist[Math.min(bins - 1, Math.round(v * scale))]++;
+  const total = values.length;
+  let sum = 0;
+  for (let i = 0; i < bins; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, best = 0, bestVar = -1;
+  for (let i = 0; i < bins; i++) {
+    wB += hist[i];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += i * hist[i];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > bestVar) { bestVar = between; best = i; }
+  }
+  return best / scale;
+}
+
+/**
+ * Foreground mask: pixels that differ from the background colour. Captures the
+ * body and every band (regardless of hue) plus the leads. The threshold is
+ * chosen by Otsu on the distance-to-background distribution, clamped to a sane
+ * range so a near-empty or very busy frame can't produce a degenerate mask.
+ */
+function computeForegroundMask(imgData, bgRgb) {
+  const { data, width: W, height: H } = imgData;
+  const n = W * H;
+  const dist = new Float32Array(n);
+  let maxD = 1;
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const dr = data[i] - bgRgb[0], dg = data[i + 1] - bgRgb[1], db = data[i + 2] - bgRgb[2];
+    const d = Math.sqrt(dr * dr + dg * dg + db * db);
+    dist[p] = d;
+    if (d > maxD) maxD = d;
+  }
+  const sample = [];
+  for (let p = 0; p < n; p += 7) sample.push(dist[p]);
+  let t = otsuThreshold(sample, maxD);
+  t = Math.max(28, Math.min(t, 150));
+  const mask = new Uint8Array(n);
+  for (let p = 0; p < n; p++) if (dist[p] > t) mask[p] = 1;
+  return { mask, threshold: t };
+}
+
+// =========================================================
+// MORPHOLOGY (8-connected, so diagonal leads stay attached)
+// =========================================================
+
+function dilate8(mask, W, H, iterations = 1) {
   let cur = mask;
   for (let it = 0; it < iterations; it++) {
     const next = new Uint8Array(cur.length);
@@ -141,11 +221,17 @@ function dilate(mask, W, H, iterations = 1) {
       for (let x = 0; x < W; x++) {
         const p = y * W + x;
         if (cur[p]) { next[p] = 1; continue; }
-        // Check 4-neighbors
-        if (x > 0 && cur[p - 1]) { next[p] = 1; continue; }
-        if (x < W - 1 && cur[p + 1]) { next[p] = 1; continue; }
-        if (y > 0 && cur[p - W]) { next[p] = 1; continue; }
-        if (y < H - 1 && cur[p + W]) { next[p] = 1; continue; }
+        let hit = false;
+        for (let dy = -1; dy <= 1 && !hit; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= H) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= W) continue;
+            if (cur[yy * W + xx]) { hit = true; break; }
+          }
+        }
+        if (hit) next[p] = 1;
       }
     }
     cur = next;
@@ -153,7 +239,7 @@ function dilate(mask, W, H, iterations = 1) {
   return cur;
 }
 
-function erode(mask, W, H, iterations = 1) {
+function erode8(mask, W, H, iterations = 1) {
   let cur = mask;
   for (let it = 0; it < iterations; it++) {
     const next = new Uint8Array(cur.length);
@@ -161,11 +247,15 @@ function erode(mask, W, H, iterations = 1) {
       for (let x = 0; x < W; x++) {
         const p = y * W + x;
         if (!cur[p]) continue;
-        if (x === 0 || !cur[p - 1]) continue;
-        if (x === W - 1 || !cur[p + 1]) continue;
-        if (y === 0 || !cur[p - W]) continue;
-        if (y === H - 1 || !cur[p + W]) continue;
-        next[p] = 1;
+        let all = true;
+        for (let dy = -1; dy <= 1 && all; dy++) {
+          const yy = y + dy;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= W || yy < 0 || yy >= H || !cur[yy * W + xx]) { all = false; break; }
+          }
+        }
+        if (all) next[p] = 1;
       }
     }
     cur = next;
@@ -173,27 +263,25 @@ function erode(mask, W, H, iterations = 1) {
   return cur;
 }
 
-// Closing = dilate then erode (fills small gaps)
-function close(mask, W, H, iterations = 1) {
-  return erode(dilate(mask, W, H, iterations), W, H, iterations);
+// Closing = dilate then erode (fills small gaps, e.g. between bands).
+function close8(mask, W, H, iterations = 1) {
+  return erode8(dilate8(mask, W, H, iterations), W, H, iterations);
 }
 
 /**
- * Find the largest connected component (4-connectivity).
- * Returns { mask: Uint8Array, count: number, bounds: {minX, maxX, minY, maxY},
- *           cx, cy } or null.
+ * Largest connected component (8-connectivity).
+ * Returns { mask, count, bounds, cx, cy } or null.
  */
-function largestComponent(mask, W, H) {
+function largestComponent8(mask, W, H) {
   const labels = new Int32Array(mask.length);
-  const sizes = [0]; // index 0 = unused
-  let nextLabel = 1;
   const stack = [];
+  let nextLabel = 1;
+  let bestLabel = 0, bestCount = 0;
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const p = y * W + x;
       if (!mask[p] || labels[p]) continue;
-      // BFS flood fill
       labels[p] = nextLabel;
       stack.length = 0;
       stack.push(p);
@@ -203,33 +291,27 @@ function largestComponent(mask, W, H) {
         count++;
         const qx = q % W;
         const qy = (q - qx) / W;
-        const neighbors = [];
-        if (qx > 0) neighbors.push(q - 1);
-        if (qx < W - 1) neighbors.push(q + 1);
-        if (qy > 0) neighbors.push(q - W);
-        if (qy < H - 1) neighbors.push(q + W);
-        for (const n of neighbors) {
-          if (mask[n] && !labels[n]) {
-            labels[n] = nextLabel;
-            stack.push(n);
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = qy + dy;
+          if (yy < 0 || yy >= H) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const xx = qx + dx;
+            if (xx < 0 || xx >= W) continue;
+            const nn = yy * W + xx;
+            if (mask[nn] && !labels[nn]) { labels[nn] = nextLabel; stack.push(nn); }
           }
         }
       }
-      sizes.push(count);
+      if (count > bestCount) { bestCount = count; bestLabel = nextLabel; }
       nextLabel++;
     }
   }
 
-  if (sizes.length < 2) return null;
-
-  let bestLabel = 1;
-  for (let i = 2; i < sizes.length; i++) {
-    if (sizes[i] > sizes[bestLabel]) bestLabel = i;
-  }
+  if (!bestLabel) return null;
 
   const outMask = new Uint8Array(mask.length);
-  let minX = W, maxX = -1, minY = H, maxY = -1;
-  let sumX = 0, sumY = 0, count = 0;
+  let minX = W, maxX = -1, minY = H, maxY = -1, sumX = 0, sumY = 0, count = 0;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const p = y * W + x;
@@ -239,142 +321,95 @@ function largestComponent(mask, W, H) {
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
-        sumX += x;
-        sumY += y;
-        count++;
+        sumX += x; sumY += y; count++;
       }
     }
   }
-  return {
-    mask: outMask,
-    count,
-    bounds: { minX, maxX, minY, maxY },
-    cx: sumX / count,
-    cy: sumY / count,
-  };
-}
-
-
-/**
- * Find all connected components in a binary mask and score them as possible
- * resistor bodies. This is the "reference rectangle" stage: a resistor body
- * should be elongated, reasonably rectangular after morphology, and not tiny.
- */
-function connectedComponents(mask, W, H) {
-  const labels = new Int32Array(mask.length);
-  const components = [];
-  const stack = [];
-  let nextLabel = 1;
-
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const p = y * W + x;
-      if (!mask[p] || labels[p]) continue;
-      labels[p] = nextLabel;
-      stack.length = 0;
-      stack.push(p);
-      let count = 0, minX = x, maxX = x, minY = y, maxY = y, sumX = 0, sumY = 0;
-
-      while (stack.length) {
-        const q = stack.pop();
-        const qx = q % W;
-        const qy = (q - qx) / W;
-        count++;
-        sumX += qx; sumY += qy;
-        if (qx < minX) minX = qx; if (qx > maxX) maxX = qx;
-        if (qy < minY) minY = qy; if (qy > maxY) maxY = qy;
-        if (qx > 0) { const n = q - 1; if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); } }
-        if (qx < W - 1) { const n = q + 1; if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); } }
-        if (qy > 0) { const n = q - W; if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); } }
-        if (qy < H - 1) { const n = q + W; if (mask[n] && !labels[n]) { labels[n] = nextLabel; stack.push(n); } }
-      }
-      components.push({ label: nextLabel, count, bounds: { minX, maxX, minY, maxY }, cx: sumX / count, cy: sumY / count });
-      nextLabel++;
-    }
-  }
-  return { labels, components };
-}
-
-function componentMask(labels, label) {
-  const out = new Uint8Array(labels.length);
-  for (let i = 0; i < labels.length; i++) if (labels[i] === label) out[i] = 1;
-  return out;
-}
-
-function scoreBodyComponent(c, W, H) {
-  const bw = c.bounds.maxX - c.bounds.minX + 1;
-  const bh = c.bounds.maxY - c.bounds.minY + 1;
-  const longSide = Math.max(bw, bh);
-  const shortSide = Math.max(1, Math.min(bw, bh));
-  const aspect = longSide / shortSide;
-  const fill = c.count / Math.max(1, bw * bh);
-  const areaFrac = c.count / (W * H);
-  const aspectScore = Math.max(0, 1 - Math.abs(aspect - 4.0) / 4.0);
-  const fillScore = Math.max(0, 1 - Math.abs(fill - 0.62) / 0.62);
-  const sizeScore = Math.max(0, Math.min(1, areaFrac / 0.015));
-  const notHugePenalty = areaFrac > 0.55 ? 0.15 : 1;
-  return (0.52 * aspectScore + 0.28 * fillScore + 0.20 * sizeScore) * notHugePenalty;
-}
-
-function bestBodyComponent(mask, W, H) {
-  const { labels, components } = connectedComponents(mask, W, H);
-  let best = null;
-  for (const c of components) {
-    if (c.count < Math.max(120, W * H * 0.001)) continue;
-    const bw = c.bounds.maxX - c.bounds.minX + 1;
-    const bh = c.bounds.maxY - c.bounds.minY + 1;
-    const aspect = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
-    if (aspect < 1.6) continue;
-    const score = scoreBodyComponent(c, W, H);
-    if (!best || score > best.score) best = { ...c, score };
-  }
-  if (!best) return largestComponent(mask, W, H);
-  return { ...best, mask: componentMask(labels, best.label) };
+  return { mask: outMask, count, bounds: { minX, maxX, minY, maxY }, cx: sumX / count, cy: sumY / count };
 }
 
 // =========================================================
 // ORIENTATION (PCA)
 // =========================================================
 
-/**
- * Compute the principal axis angle from a binary mask via PCA on its pixels.
- * Returns angle in radians (math convention).
- */
 function pcaAngle(mask, W, H, cx, cy) {
   let sxx = 0, syy = 0, sxy = 0, count = 0;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       if (mask[y * W + x]) {
-        const dx = x - cx;
-        const dy = y - cy;
-        sxx += dx * dx;
-        syy += dy * dy;
-        sxy += dx * dy;
-        count++;
+        const dx = x - cx, dy = y - cy;
+        sxx += dx * dx; syy += dy * dy; sxy += dx * dy; count++;
       }
     }
   }
   if (count === 0) return 0;
-  sxx /= count;
-  syy /= count;
-  sxy /= count;
-  // Largest eigenvalue direction of 2x2 symmetric matrix [[sxx, sxy], [sxy, syy]]
-  // Eigenvalues: lambda = (sxx + syy) / 2 ± sqrt(((sxx-syy)/2)^2 + sxy^2)
+  sxx /= count; syy /= count; sxy /= count;
   const trace = sxx + syy;
   const det = sxx * syy - sxy * sxy;
   const tmp = Math.sqrt(Math.max(0, (trace * trace) / 4 - det));
   const lambdaMax = trace / 2 + tmp;
-  // Eigenvector for lambdaMax: ([sxy, lambdaMax - sxx]) or ([lambdaMax - syy, sxy])
   let vx, vy;
-  if (Math.abs(sxy) > 1e-6) {
-    vx = sxy;
-    vy = lambdaMax - sxx;
-  } else if (sxx >= syy) {
-    vx = 1; vy = 0;
-  } else {
-    vx = 0; vy = 1;
-  }
+  if (Math.abs(sxy) > 1e-6) { vx = sxy; vy = lambdaMax - sxx; }
+  else if (sxx >= syy) { vx = 1; vy = 0; }
+  else { vx = 0; vy = 1; }
   return Math.atan2(vy, vx);
+}
+
+// =========================================================
+// BODY ISOLATION (separate the thick body from thin leads)
+// =========================================================
+
+/**
+ * Given a horizontalised foreground mask, find the resistor body by its column
+ * thickness: the body is far thicker than the leads. Returns body bounds or null.
+ */
+function isolateBody(mask, W, H) {
+  const thickness = new Int32Array(W);
+  let maxThick = 0;
+  for (let x = 0; x < W; x++) {
+    let t = 0;
+    for (let y = 0; y < H; y++) if (mask[y * W + x]) t++;
+    thickness[x] = t;
+    if (t > maxThick) maxThick = t;
+  }
+  if (maxThick < 4) return null;
+
+  const bodyT = Math.max(6, maxThick * 0.45);
+  let bestStart = -1, bestLen = 0, curStart = -1, gap = 0;
+  const maxGap = Math.max(2, Math.floor(W * 0.01));
+  for (let x = 0; x < W; x++) {
+    if (thickness[x] >= bodyT) {
+      if (curStart < 0) curStart = x;
+      gap = 0;
+    } else if (curStart >= 0) {
+      gap++;
+      if (gap > maxGap) {
+        const len = (x - gap) - curStart + 1;
+        if (len > bestLen) { bestLen = len; bestStart = curStart; }
+        curStart = -1; gap = 0;
+      }
+    }
+  }
+  if (curStart >= 0) {
+    const len = (W - 1) - curStart + 1;
+    if (len > bestLen) { bestLen = len; bestStart = curStart; }
+  }
+  if (bestStart < 0) return null;
+  const bx0 = bestStart;
+  const bx1 = bestStart + bestLen - 1;
+
+  const tops = [], bots = [];
+  for (let x = bx0; x <= bx1; x++) {
+    let top = -1, bot = -1;
+    for (let y = 0; y < H; y++) if (mask[y * W + x]) { if (top < 0) top = y; bot = y; }
+    if (top >= 0) { tops.push(top); bots.push(bot); }
+  }
+  if (!tops.length) return null;
+  return {
+    minX: bx0, maxX: bx1,
+    minY: Math.round(median(tops)),
+    maxY: Math.round(median(bots)),
+  };
 }
 
 // =========================================================
@@ -382,37 +417,28 @@ function pcaAngle(mask, W, H, cx, cy) {
 // =========================================================
 
 /**
- * Sample columns inside the body, averaging pixels in a y-strip.
- * Returns { xs: Int32Array, rgb: Float32Array (n*3) }.
+ * Per-column colour profile across the body. For each column take the median
+ * colour over the central vertical region (robust to specular highlight and
+ * to the rounded top/bottom edges). Returns { xs, rgbs }.
  */
-function sampleStrip(imgData, bodyMask, y0, y1, x0, x1) {
+function columnColorProfile(imgData, body) {
   const { data, width: W } = imgData;
-  const colWidth = x1 - x0 + 1;
-  const xs = [];
-  const rgbs = [];
-
-  for (let x = x0; x <= x1; x++) {
-    let sumR = 0, sumG = 0, sumB = 0, n = 0;
-    for (let y = y0; y < y1; y++) {
-      if (bodyMask[y * W + x]) {
-        const i = (y * W + x) * 4;
-        sumR += data[i];
-        sumG += data[i + 1];
-        sumB += data[i + 2];
-        n++;
-      }
+  const { minX, maxX, minY, maxY } = body;
+  const h = maxY - minY + 1;
+  const yTop = minY + Math.floor(h * 0.22);
+  const yBot = maxY - Math.floor(h * 0.22);
+  const xs = [], rgbs = [];
+  for (let x = minX; x <= maxX; x++) {
+    const rr = [], gg = [], bb = [];
+    for (let y = yTop; y <= yBot; y++) {
+      const i = (y * W + x) * 4;
+      rr.push(data[i]); gg.push(data[i + 1]); bb.push(data[i + 2]);
     }
-    if (n > 0) {
-      xs.push(x);
-      rgbs.push([sumR / n, sumG / n, sumB / n]);
-    }
+    if (rr.length) { xs.push(x); rgbs.push([median(rr), median(gg), median(bb)]); }
   }
   return { xs, rgbs };
 }
 
-/**
- * Smooth a list of [r,g,b] colors with a centered moving average of given window size.
- */
 function smoothColors(rgbs, win = 3) {
   const n = rgbs.length;
   const out = new Array(n);
@@ -421,177 +447,159 @@ function smoothColors(rgbs, win = 3) {
     let sumR = 0, sumG = 0, sumB = 0, count = 0;
     const lo = Math.max(0, i - half);
     const hi = Math.min(n, i + half + 1);
-    for (let j = lo; j < hi; j++) {
-      sumR += rgbs[j][0];
-      sumG += rgbs[j][1];
-      sumB += rgbs[j][2];
-      count++;
-    }
+    for (let j = lo; j < hi; j++) { sumR += rgbs[j][0]; sumG += rgbs[j][1]; sumB += rgbs[j][2]; count++; }
     out[i] = [sumR / count, sumG / count, sumB / count];
   }
   return out;
 }
 
-function rgbDistance(a, b) {
-  const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
-  return Math.sqrt(dr * dr + dg * dg + db * db);
-}
-
-function median(arr) {
-  const sorted = [...arr].sort((a, b) => a - b);
-  const n = sorted.length;
-  if (n === 0) return 0;
-  return n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[(n - 1) / 2];
-}
-
-function medianRgb(rgbs) {
-  return [0, 1, 2].map(ch => median(rgbs.map(rgb => rgb[ch])));
+/**
+ * Separation score between a column colour and the body substrate. Combines
+ * raw RGB distance with a chroma/value term, so strongly coloured bands
+ * (green, blue, red) separate cleanly while darker/metallic bands still count.
+ */
+function bandSeparation(rgb, substrate) {
+  const base = rgbDistance(rgb, substrate);
+  const [, s1, v1] = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+  const [, s2, v2] = rgbToHsv(substrate[0], substrate[1], substrate[2]);
+  const chroma = Math.abs(s1 - s2) * 120 + Math.abs(v1 - v2) * 60;
+  return Math.max(base, base * 0.6 + chroma * 0.7);
 }
 
 /**
- * Detect bands as columns that are far from the body color.
- * Returns array of band regions { start, end, rgb, name, distance, confidence }.
+ * Detect bands as runs of columns whose colour departs from the body
+ * substrate. Strong (clearly coloured) bands are found with a robust
+ * threshold. A low-contrast gold/silver tolerance band — which on a tan
+ * carbon-film body barely differs from the substrate — is then rescued, but
+ * only at the body ENDS and outside the strong-band span, so mid-body
+ * highlights are never mistaken for a band.
+ * Returns { bands (sorted left-to-right), substrate }.
  */
-function bandVerticalCoverage(imgData, bodyMask, bbox, x0, x1, bodyColor, threshold) {
-  const { data, width: W } = imgData;
-  const { minY, maxY } = bbox;
-  const bodyH = maxY - minY + 1;
-  let rowsWithBand = 0;
-  let seenRows = 0;
+function findBands(imgData, body) {
+  const w = body.maxX - body.minX + 1;
+  const trim = Math.floor(w * 0.03);
+  const trimmedBody = { ...body, minX: body.minX + trim, maxX: body.maxX - trim };
 
-  for (let y = minY; y <= maxY; y++) {
-    let sr = 0, sg = 0, sb = 0, n = 0;
-    for (let x = x0; x <= x1; x++) {
-      if (!bodyMask[y * W + x]) continue;
-      const i = (y * W + x) * 4;
-      sr += data[i]; sg += data[i + 1]; sb += data[i + 2]; n++;
+  const profile = columnColorProfile(imgData, trimmedBody);
+  const nCols = profile.xs.length;
+  if (nCols < 8) return { bands: [], substrate: [200, 180, 140] };
+
+  const smooth = smoothColors(profile.rgbs, 5);
+  const substrate = medianRgb(smooth);
+
+  const seps = smooth.map(c => bandSeparation(c, substrate));
+  const medS = median(seps);
+  const madS = median(seps.map(d => Math.abs(d - medS)));
+  // Strong threshold: clearly above gold/highlight level, below colour bands.
+  const strongThreshold = Math.max(34, medS + 2.2 * madS);
+
+  const minBandW = Math.max(2, Math.floor(nCols * 0.015));
+  const maxBandW = Math.max(minBandW + 2, Math.floor(nCols * 0.30));
+  const maxGap = Math.max(1, Math.floor(nCols * 0.02));
+
+  // ---- helper: turn a column predicate into merged runs ----
+  function runsWhere(pred) {
+    const raw = [];
+    let i = 0;
+    while (i < seps.length) {
+      if (pred(i)) {
+        const start = i;
+        while (i < seps.length && pred(i)) i++;
+        raw.push([start, i]);
+      } else i++;
     }
-    if (!n) continue;
-    seenRows++;
-    const avg = [sr / n, sg / n, sb / n];
-    if (rgbDistance(avg, bodyColor) >= threshold) rowsWithBand++;
+    const merged = [];
+    for (const r of raw) {
+      const prev = merged[merged.length - 1];
+      if (prev && r[0] - prev[1] <= maxGap) prev[1] = r[1];
+      else merged.push([r[0], r[1]]);
+    }
+    return merged;
   }
 
-  const denominator = Math.max(1, Math.min(bodyH, seenRows || bodyH));
-  return rowsWithBand / denominator;
-}
-
-/**
- * Detect bands as vertical regions that differ from the resistor body color.
- * A candidate band is valid only if it occupies at least 75% of the detected
- * resistor bounding-box height. This rejects short stains, shadows and text.
- */
-function findBands(imgData, bodyMask, bbox) {
-  const { minX, maxX, minY, maxY } = bbox;
-  const w = maxX - minX + 1;
-  const h = maxY - minY + 1;
-
-  // Use a broad vertical sample, not just two thin strips. We still avoid the
-  // extreme top/bottom edge where anti-aliasing and background bleed are common.
-  const y0 = minY + Math.floor(h * 0.08);
-  const y1 = maxY - Math.floor(h * 0.08);
-  const trim = Math.floor(w * 0.06);
-  const bx0 = minX + trim;
-  const bx1 = maxX - trim;
-  const strip = sampleStrip(imgData, bodyMask, y0, y1, bx0, bx1);
-  if (strip.xs.length === 0) return [];
-
-  const smooth = smoothColors(strip.rgbs, 5);
-  const bodyColor = medianRgb(smooth);
-  const dists = smooth.map(c => rgbDistance(c, bodyColor));
-  const medD = median(dists);
-  const mad = median(dists.map(d => Math.abs(d - medD)));
-  const threshold = Math.max(14, medD + 1.35 * mad);
-  const verticalThreshold = Math.max(11, threshold * 0.72);
-
-  const minBandWidth = Math.max(2, Math.floor(w * 0.010));
-  const maxBandWidth = Math.max(minBandWidth + 2, Math.floor(w * 0.11));
-  const maxGap = Math.max(1, Math.floor(w * 0.012));
-
-  const rawRuns = [];
-  let i = 0;
-  while (i < dists.length) {
-    if (dists[i] > threshold) {
-      const start = i;
-      while (i < dists.length && dists[i] > threshold) i++;
-      const end = i;
-      if (end - start >= minBandWidth) rawRuns.push([start, end]);
-    } else i++;
-  }
-
-  const runs = [];
-  for (const r of rawRuns) {
-    const prev = runs[runs.length - 1];
-    if (prev && r[0] - prev[1] <= maxGap) prev[1] = r[1];
-    else runs.push(r);
-  }
-
-  const bands = [];
-  for (const [start, end] of runs) {
-    const px0 = strip.xs[start];
-    const px1 = strip.xs[end - 1];
-    const runW = px1 - px0 + 1;
-    if (runW > maxBandWidth) continue;
-
-    let sumR = 0, sumG = 0, sumB = 0;
-    for (let j = start; j < end; j++) { sumR += smooth[j][0]; sumG += smooth[j][1]; sumB += smooth[j][2]; }
-    const n = end - start;
-    const bandRgb = [sumR / n, sumG / n, sumB / n];
-    const heightRatio = bandVerticalCoverage(imgData, bodyMask, bbox, px0, px1, bodyColor, verticalThreshold);
-    const classified = classifyBand(bandRgb, bodyColor);
-
-    bands.push({
-      x_start: px0,
-      x_end: px1,
-      y_start: minY,
-      y_end: maxY,
+  function bandFromRun(start, end) {
+    const pad = Math.floor((end - start) * 0.2);
+    const cs = start + pad, ce = Math.max(cs + 1, end - pad);
+    let sr = 0, sg = 0, sb = 0, n = 0;
+    for (let j = cs; j < ce; j++) { sr += smooth[j][0]; sg += smooth[j][1]; sb += smooth[j][2]; n++; }
+    const bandRgb = [sr / n, sg / n, sb / n];
+    return {
+      ci_start: start, ci_end: end,
+      x_start: profile.xs[start],
+      x_end: profile.xs[Math.min(profile.xs.length - 1, end - 1)],
+      y_start: body.minY,
+      y_end: body.maxY,
       rgb: bandRgb,
-      heightRatio,
-      validHeight: heightRatio >= 0.75,
-      ...classified,
-    });
+      separation: median(seps.slice(start, end)),
+      ...classifyBand(bandRgb, substrate),
+    };
   }
 
-  return bands
-    .filter(b => b.validHeight)
-    .map(b => ({ ...b, strength: rgbDistance(b.rgb, bodyColor) * Math.max(0.35, b.confidence) * b.heightRatio }))
-    .sort((a, b) => b.strength - a.strength)
-    .slice(0, 5)
-    .sort((a, b) => a.x_start - b.x_start);
+  // ---- strong colour bands ----
+  const strong = [];
+  for (const [s, e] of runsWhere(i => seps[i] > strongThreshold)) {
+    const wc = e - s;
+    if (wc < minBandW || wc > maxBandW) continue;
+    strong.push(bandFromRun(s, e));
+  }
+
+  // ---- end-zone gold/silver rescue ----
+  // Only search the body ends, outside the span covered by strong bands, so a
+  // mid-body specular highlight can never be mistaken for a tolerance band.
+  const rescued = [];
+  if (strong.length) {
+    const spanMin = strong[0].ci_start;
+    const spanMax = strong[strong.length - 1].ci_end;
+    const margin = Math.max(2, Math.floor(nCols * 0.03));
+    const goldThreshold = Math.max(26, strongThreshold * 0.5);
+    const endZones = [
+      [0, spanMin - margin],
+      [spanMax + margin, seps.length],
+    ];
+    for (const [zs, ze] of endZones) {
+      if (ze - zs < minBandW) continue;
+      for (const [s, e] of runsWhere(i => i >= zs && i < ze && seps[i] > goldThreshold)) {
+        const wc = e - s;
+        if (wc < minBandW || wc > maxBandW) continue;
+        const cand = bandFromRun(s, e);
+        if (cand.id === 'gold' || cand.id === 'silver') rescued.push(cand);
+      }
+    }
+  }
+
+  const bands = strong.concat(rescued).sort((a, b) => a.x_start - b.x_start);
+  return { bands, substrate };
 }
 
-/**
- * Classify a band's RGB against the 12 standard colors.
- * Returns { id, distance, confidence (0..1, higher = more confident) }.
- */
+// =========================================================
+// CLASSIFICATION
+// =========================================================
+
 function hueDistance(a, b) {
   const d = Math.abs(a - b) % 360;
   return Math.min(d, 360 - d) / 180;
 }
 
 /**
- * Classify a band using hue, saturation and value rather than raw RGB only.
- * This is more stable with phone auto white-balance and with blue/green bodies.
+ * Classify a band using hue, saturation and value. Returns { id, distance,
+ * confidence (0..1) }.
  */
 function classifyBand(rgb, bodyRgb = null) {
   const [h, s, v] = rgbToHsv(rgb[0], rgb[1], rgb[2]);
-  let bestRef = null;
-  let bestDist = Infinity;
-  let secondDist = Infinity;
+  let bestRef = null, bestDist = Infinity, secondDist = Infinity;
 
   for (const ref of BAND_REFS) {
     const [rh, rs, rv] = rgbToHsv(ref.rgb[0], ref.rgb[1], ref.rgb[2]);
     let d;
-    // Black/white/gray/silver need luminance handling; colored bands need hue.
     if (['black', 'gray', 'white', 'silver'].includes(ref.id)) {
       d = Math.abs(v - rv) * 1.15 + Math.abs(s - rs) * 0.85;
+      if (s > 0.45) d += (s - 0.45) * 1.2;
     } else if (ref.id === 'gold') {
-      d = hueDistance(h, rh) * 1.25 + Math.abs(s - rs) * 0.35 + Math.abs(v - rv) * 0.25;
+      d = hueDistance(h, rh) * 1.15 + Math.abs(s - rs) * 0.45 + Math.abs(v - rv) * 0.30;
     } else {
-      d = hueDistance(h, rh) * 1.45 + Math.abs(s - rs) * 0.35 + Math.abs(v - rv) * 0.20;
+      d = hueDistance(h, rh) * 1.45 + Math.abs(s - rs) * 0.35 + Math.abs(v - rv) * 0.45;
     }
-    // Penalize colors too similar to the resistor body, reducing false body texture bands.
-    if (bodyRgb && rgbDistance(rgb, bodyRgb) < 22 && !['black', 'white', 'gray', 'silver'].includes(ref.id)) d += 0.22;
+    if (bodyRgb && rgbDistance(rgb, bodyRgb) < 20 && !['black', 'white', 'gray', 'silver'].includes(ref.id)) d += 0.22;
     if (d < bestDist) { secondDist = bestDist; bestDist = d; bestRef = ref; }
     else if (d < secondDist) secondDist = d;
   }
@@ -606,65 +614,27 @@ function classifyBand(rgb, bodyRgb = null) {
 // READING DIRECTION + VALUE COMPUTATION
 // =========================================================
 
-/**
- * Decide which end has the tolerance band.
- * Heuristic: the band closest to a body edge AND a tolerance-capable color
- * is the tolerance band. If both ends are ambiguous, try both readings and
- * prefer one that gives a sensible value.
- */
-function pickReadingDirection(bands, mode) {
-  if (bands.length < mode) {
-    // Not enough bands — just return as-is
-    return {
-      picks: bands.map(b => b.id),
-      bandsWithConf: bands,
-      reason: 'Too few bands detected',
-    };
-  }
+function computeReading(picks, mode) {
+  return (window.ResistorEngine && window.ResistorEngine.computeOhmsFromPicks)
+    ? window.ResistorEngine.computeOhmsFromPicks(picks, mode)
+    : null;
+}
 
-  const truncated = bands.slice(0, mode);
-  const reversed = [...truncated].reverse();
-
-  const lastForward = truncated[truncated.length - 1];
-  const lastReverse = reversed[reversed.length - 1];
-
-  const forwardTolOk = TOL_COLORS.has(lastForward.id);
-  const reverseTolOk = TOL_COLORS.has(lastReverse.id);
-
-  let chosen, dir;
-  if (forwardTolOk && !reverseTolOk) {
-    chosen = truncated;
-    dir = 'forward';
-  } else if (reverseTolOk && !forwardTolOk) {
-    chosen = reversed;
-    dir = 'reverse';
-  } else {
-    // Both or neither — prefer forward
-    chosen = truncated;
-    dir = 'both candidates';
-  }
-
-  return {
-    picks: chosen.map(b => b.id),
-    bandsWithConf: chosen,
-    reason: `Reading direction: ${dir}`,
-  };
+function formatCandidate(picks, mode) {
+  const c = computeReading(picks, mode);
+  return { picks, mode, ohms: c ? c.ohms : null, tol: c ? c.tol : null };
 }
 
 // =========================================================
 // DEBUG VISUALIZATION
 // =========================================================
 
-/**
- * Build a debug canvas showing the rotated image cropped to the body,
- * with detected bands outlined in red. Uncertain bands get a yellow outline.
- */
-function buildDebugCanvas(imgData, bodyMask, bbox, bands, note = '') {
-  const { minX, maxX, minY, maxY } = bbox;
+function buildDebugCanvas(imgData, body, bands, note = '') {
+  const { minX, maxX, minY, maxY } = body;
   const w = maxX - minX + 1;
   const h = maxY - minY + 1;
 
-  const margin = Math.floor(Math.min(w, h) * 0.25);
+  const margin = Math.floor(Math.min(w, h) * 0.6) + 12;
   const cx0 = Math.max(0, minX - margin);
   const cy0 = Math.max(0, minY - margin);
   const cx1 = Math.min(imgData.width - 1, maxX + margin);
@@ -679,18 +649,15 @@ function buildDebugCanvas(imgData, bodyMask, bbox, bands, note = '') {
   const ctx = debug.getContext('2d');
   ctx.drawImage(src, cx0, cy0, cw, ch, 0, 0, cw, ch);
 
-  // Resistor bounding box: green, always visible.
   ctx.strokeStyle = 'rgba(0, 220, 90, 0.98)';
   ctx.lineWidth = 3;
   ctx.strokeRect(minX - cx0, minY - cy0, w, h);
   ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-  ctx.fillRect(Math.max(0, minX - cx0), Math.max(0, minY - cy0 - 22), 190, 20);
+  ctx.fillRect(Math.max(0, minX - cx0), Math.max(0, minY - cy0 - 22), 150, 20);
   ctx.fillStyle = '#fff';
   ctx.font = '13px system-ui, -apple-system, sans-serif';
-  ctx.fillText(`resistor box ${w}×${h}`, Math.max(4, minX - cx0 + 4), Math.max(14, minY - cy0 - 7));
+  ctx.fillText(`body ${w}x${h}`, Math.max(4, minX - cx0 + 4), Math.max(14, minY - cy0 - 7));
 
-  // Detected valid bands: red/yellow rectangles. The label includes height
-  // coverage so the user can verify the 75% rule visually.
   for (const b of bands) {
     const isLow = b.confidence < 0.40;
     ctx.strokeStyle = isLow ? 'rgba(255, 200, 0, 0.98)' : 'rgba(255, 0, 0, 0.98)';
@@ -698,13 +665,12 @@ function buildDebugCanvas(imgData, bodyMask, bbox, bands, note = '') {
     const rx = b.x_start - cx0;
     const ry = minY - cy0;
     const rw = Math.max(2, b.x_end - b.x_start + 1);
-    const rh = h;
-    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.strokeRect(rx, ry, rw, h);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.62)';
-    ctx.fillRect(rx, Math.max(0, ry - 18), 54, 16);
+    ctx.fillRect(rx, Math.max(0, ry - 18), 46, 16);
     ctx.fillStyle = '#fff';
     ctx.font = '11px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`${b.id} ${Math.round((b.heightRatio || 0) * 100)}%`, rx + 2, Math.max(11, ry - 6));
+    ctx.fillText(b.id, rx + 2, Math.max(11, ry - 6));
   }
 
   if (note) {
@@ -722,86 +688,63 @@ function buildDebugCanvas(imgData, bodyMask, bbox, bands, note = '') {
 // MAIN ENTRY POINT
 // =========================================================
 
-/**
- * Process an image (ImageData) and return detection result.
- * Returns:
- *   { success: true, mode, picks, bands, ohms, tol, debugImage }
- *   or { success: false, reason, debugImage }
- */
-function computeReading(picks, mode) {
-  return (window.ResistorEngine && window.ResistorEngine.computeOhmsFromPicks)
-    ? window.ResistorEngine.computeOhmsFromPicks(picks, mode)
-    : null;
-}
-
-function formatCandidate(picks, mode) {
-  const c = computeReading(picks, mode);
-  return { picks, mode, ohms: c ? c.ohms : null, tol: c ? c.tol : null };
-}
-
-function analyzeHorizontalImage(rotated, note = '') {
-  let mask = computeBodyMask(rotated);
-  mask = close(mask, rotated.width, rotated.height, 4);
-  mask = dilate(mask, rotated.width, rotated.height, 1);
-  let cc = bestBodyComponent(mask, rotated.width, rotated.height);
+function analyzeHorizontalImage(rotated, bgRgb, note = '') {
+  const W = rotated.width, H = rotated.height;
+  let { mask } = computeForegroundMask(rotated, bgRgb);
+  mask = close8(mask, W, H, 2);
+  const cc = largestComponent8(mask, W, H);
   if (!cc) {
     return { success: false, reason: 'Detection failed after rotation.', debugImage: imageDataToCanvas(rotated) };
   }
 
-  const bw = cc.bounds.maxX - cc.bounds.minX + 1;
-  const bh = cc.bounds.maxY - cc.bounds.minY + 1;
-  if (bh > bw) {
-    rotated = rotateImageData(rotated, 90, [255, 255, 255]);
-    mask = computeBodyMask(rotated);
-    mask = close(mask, rotated.width, rotated.height, 4);
-    mask = dilate(mask, rotated.width, rotated.height, 1);
-    cc = bestBodyComponent(mask, rotated.width, rotated.height);
-    if (!cc) {
-      return { success: false, reason: 'Detection failed after re-rotation.', debugImage: imageDataToCanvas(rotated) };
+  let body = isolateBody(cc.mask, W, H) || cc.bounds;
+
+  if ((body.maxY - body.minY) > (body.maxX - body.minX)) {
+    const rot = rotateImageData(rotated, 90, bgRgb);
+    let m2 = computeForegroundMask(rot, bgRgb).mask;
+    m2 = close8(m2, rot.width, rot.height, 2);
+    const cc2 = largestComponent8(m2, rot.width, rot.height);
+    if (cc2) {
+      const body2 = isolateBody(cc2.mask, rot.width, rot.height) || cc2.bounds;
+      const r = findBands(rot, body2);
+      return { success: true, rotated: rot, body: body2, bands: r.bands, debugImage: buildDebugCanvas(rot, body2, r.bands, note) };
     }
   }
 
-  const bands = findBands(rotated, cc.mask, cc.bounds);
-  const debugImage = buildDebugCanvas(rotated, cc.mask, cc.bounds, bands, note);
-  return { success: true, rotated, cc, bands, debugImage };
+  const r = findBands(rotated, body);
+  return { success: true, rotated, body, bands: r.bands, debugImage: buildDebugCanvas(rotated, body, r.bands, note) };
 }
 
-/**
- * Process an image (ImageData) and return detection result.
- * Implements the requested flow:
- * 1) find elongated rectangular resistor body, 2) rotate horizontal,
- * 3) validate full-height bands in the body box, 4) accept only 4/5 bands,
- * 5-7) correct first gold/silver by 180 degrees and decode left-to-right,
- * 8) if last band is not gold/silver, also decode backwards and return both.
- */
 async function detectResistor(imageData) {
-  const work = downscaleIfNeeded(imageData, 900);
+  const work = downscaleIfNeeded(imageData, 820);
   const W = work.width, H = work.height;
 
-  let mask = computeBodyMask(work);
-  mask = close(mask, W, H, 4);
-  mask = dilate(mask, W, H, 1);
-  const cc = bestBodyComponent(mask, W, H);
+  const bg = estimateBackground(work);
 
-  if (!cc || cc.count < Math.max(180, W * H * 0.0012)) {
+  let { mask } = computeForegroundMask(work, bg);
+  mask = close8(mask, W, H, 2);
+  const linked = dilate8(mask, W, H, 1);
+  const cc = largestComponent8(linked, W, H);
+
+  if (!cc || cc.count < Math.max(150, W * H * 0.0008)) {
     return {
       success: false,
-      reason: "Couldn't find an elongated rectangular resistor body. Centre the resistor in the guide box on a plain background.",
+      reason: "Couldn't find the resistor against the background. Use a plain, contrasting background and fill the guide box.",
       debugImage: imageDataToCanvas(work),
     };
   }
 
   const angleRad = pcaAngle(cc.mask, W, H, cc.cx, cc.cy);
   const angleDeg = angleRad * 180 / Math.PI;
-  let rotated = rotateImageData(work, angleDeg, [255, 255, 255]);
-  let pass = analyzeHorizontalImage(rotated, 'horizontalized');
+  // Rotate by the negative of the principal-axis angle to bring it horizontal.
+  let rotated = rotateImageData(work, -angleDeg, bg);
+
+  let pass = analyzeHorizontalImage(rotated, bg, 'straightened');
   if (!pass.success) return pass;
 
-  // If the first detected band is tolerance-colored gold/silver, the resistor
-  // is reversed. Rotate by 180 degrees and run band detection again.
   if (pass.bands.length >= 4 && ['gold', 'silver'].includes(pass.bands[0].id)) {
-    rotated = rotateImageData(pass.rotated, 180, [255, 255, 255]);
-    pass = analyzeHorizontalImage(rotated, 'rotated 180°: first band was tolerance color');
+    rotated = rotateImageData(pass.rotated, 180, bg);
+    pass = analyzeHorizontalImage(rotated, bg, 'flipped 180deg (tolerance band was first)');
     if (!pass.success) return pass;
   }
 
@@ -811,9 +754,9 @@ async function detectResistor(imageData) {
   if (bands.length !== 4 && bands.length !== 5) {
     return {
       success: false,
-      reason: `Detected ${bands.length} valid full-height band${bands.length === 1 ? '' : 's'}. Need exactly 4 or 5 bands; each valid band must occupy at least 75% of the resistor bounding-box height.`,
+      reason: `Detected ${bands.length} band${bands.length === 1 ? '' : 's'}. Need exactly 4 or 5. Try a sharper photo, a plainer background, and make sure all bands are visible.`,
       debugImage,
-      bands,
+      bands: bands.map(b => ({ colorId: b.id, confidence: b.confidence, rgb: b.rgb })),
     };
   }
 
@@ -824,26 +767,19 @@ async function detectResistor(imageData) {
 
   const last = forwardBands[forwardBands.length - 1];
   let alternatives = [];
-  let reasoning = 'Read left-to-right.';
+  let reasoning = 'Read left-to-right; the tolerance band is on the right.';
 
   if (!['gold', 'silver'].includes(last.id)) {
-    const reverseBands = [...forwardBands].reverse();
-    const reversePicks = reverseBands.map(b => b.id);
-    const reverse = formatCandidate(reversePicks, mode);
+    const reverse = formatCandidate([...forwardBands].reverse().map(b => b.id), mode);
     alternatives = [forward, reverse];
-    reasoning = 'Last band is not gold/silver, so both left-to-right and right-to-left readings are shown.';
+    reasoning = 'No clear gold/silver tolerance band, so both reading directions are shown.';
   }
 
   return {
     success: true,
     mode,
     picks: forward.picks,
-    bands: forwardBands.map(b => ({
-      colorId: b.id,
-      confidence: b.confidence,
-      rgb: b.rgb,
-      heightRatio: b.heightRatio,
-    })),
+    bands: forwardBands.map(b => ({ colorId: b.id, confidence: b.confidence, rgb: b.rgb })),
     ohms: forward.ohms,
     tol: forward.tol,
     alternatives,
